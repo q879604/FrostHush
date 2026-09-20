@@ -176,19 +176,13 @@ fun SettingsScreenMiuix(
                     onClick = { checkSuspended() },
                 )
             }
-            // 底部：数据 / 检查更新 / 重新查看引导
+            // 底部：数据 / 重新查看引导
             Card {
                 ArrowPreference(
                     title = stringResource(R.string.settings_group_data),
                     summary = stringResource(R.string.settings_group_data_summary),
                     startAction = { SettingIcon(MiuixIcons.Folder) },
                     onClick = onOpenDataSettings,
-                )
-                ArrowPreference(
-                    title = stringResource(R.string.about_check_update),
-                    summary = stringResource(R.string.settings_update_entry_summary),
-                    startAction = { SettingIcon(MiuixIcons.Update) },
-                    onClick = onOpenUpdateSettings,
                 )
                 ArrowPreference(
                     title = stringResource(R.string.settings_replay_welcome),

@@ -227,20 +227,6 @@ fun SettingsScreenMaterial(
             )
 
             SettingCard(
-                icon = Icons.Filled.CloudDownload,
-                title = stringResource(R.string.about_check_update),
-                summary = stringResource(R.string.settings_update_entry_summary),
-                onClick = onOpenUpdateSettings,
-                trailing = {
-                    Icon(
-                        Icons.Filled.ChevronRight,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                },
-            )
-
-            SettingCard(
                 icon = Icons.Filled.Refresh,
                 title = stringResource(R.string.settings_replay_welcome),
                 summary = stringResource(R.string.settings_replay_welcome_summary),

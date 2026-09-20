@@ -2,6 +2,7 @@ package com.frosthush.app.ui.component.miuix.animation
 
 import android.annotation.SuppressLint
 import android.graphics.RuntimeShader
+import android.os.Build
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.VisibilityThreshold
@@ -40,10 +41,14 @@ class InteractiveHighlight(
     private var startPosition = Offset.Zero
     val offset: Offset get() = positionAnimation.value - startPosition
 
+    // android.graphics.RuntimeShader 是 API 33+ 才有的类：低版本上连字段初始化都会抛
+    // NoClassDefFoundError 直接闪退（欢迎页没有底栏所以正常，一进主界面建悬浮底栏就崩），
+    // 必须按版本短路。低版本下高亮渐变关闭，仅保留白色叠加。
     @Language("AGSL")
-    private val shader =
-        RuntimeShader(
-            """
+    private val shader: RuntimeShader? =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            RuntimeShader(
+                """
     uniform float2 size;
     layout(color) uniform half4 color;
     uniform float radius;
@@ -54,17 +59,19 @@ class InteractiveHighlight(
         float intensity = smoothstep(radius, radius * 0.5, dist);
         return color * intensity;
     }"""
-        )
+            )
+        } else null
 
     val modifier: Modifier =
         Modifier.drawWithContent {
             val progress = pressProgressAnimation.value
-            if (progress > 0f) {
+            val sh = shader
+            if (progress > 0f && sh != null) {
                 drawRect(
                     Color.White.copy(0.06f * progress),
                     blendMode = BlendMode.Plus
                 )
-                shader.apply {
+                sh.apply {
                     val position = position(size, positionAnimation.value)
                     setFloatUniform("size", size.width, size.height)
                     setColorUniform("color", Color.White.copy(0.12f * progress).toArgb())
@@ -76,7 +83,7 @@ class InteractiveHighlight(
                     )
                 }
                 drawRect(
-                    ShaderBrush(shader),
+                    ShaderBrush(sh),
                     blendMode = BlendMode.Plus
                 )
             }

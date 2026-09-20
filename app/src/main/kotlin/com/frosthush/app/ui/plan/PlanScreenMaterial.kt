@@ -404,9 +404,15 @@ LazyColumn(
     }
 }
 
-/** 计划绑定的展示文案：应用集名（带「应用集：」前缀）/ 直选数 / 默认集 */
+/** 计划绑定的展示文案：应用集名（带「应用集：」前缀，多个用顿号连接）/ 直选数 / 默认集 */
 @Composable
 private fun bindingText(context: android.content.Context, plan: FocusPlan, groupNames: Map<Long, String>): String = when {
+    !plan.appGroupIds.isNullOrEmpty() -> context.getString(
+        R.string.plan_binding_group_label,
+        plan.appGroupIds.orEmpty().joinToString("、") {
+            groupNames[it] ?: context.getString(R.string.plan_group_deleted)
+        },
+    )
     plan.appGroupId != null -> context.getString(
         R.string.plan_binding_group_label,
         groupNames[plan.appGroupId] ?: context.getString(R.string.plan_group_deleted),

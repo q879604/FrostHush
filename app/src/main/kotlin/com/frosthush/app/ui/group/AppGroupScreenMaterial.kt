@@ -110,7 +110,7 @@ fun AppGroupScreenMaterial(onBack: () -> Unit) {
     var confirmDelete by remember { mutableStateOf(false) }
     // 被专注计划引用的应用集 id（删除时需确认，删除后计划回退默认集）
     val referencedGroupIds = remember(refreshKey) {
-        FocusStore.focusPlans().mapNotNull { it.appGroupId }.toSet()
+        FocusStore.focusPlans().flatMap { p -> p.appGroupIds ?: listOfNotNull(p.appGroupId) }.toSet()
     }
 
     fun doDeleteSelected() {

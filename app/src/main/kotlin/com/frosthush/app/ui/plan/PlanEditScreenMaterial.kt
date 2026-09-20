@@ -34,6 +34,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
@@ -93,10 +94,17 @@ fun PlanEditScreenMaterial(plan: FocusPlan?, onBack: () -> Unit) {
     // 0 = 从应用集选择，1 = 直接选择应用
     var bindMode by remember {
         mutableStateOf(
-            if (plan?.appGroupId != null) 0 else if (!plan?.directEntries.isNullOrEmpty()) 1 else 0
+            if (!plan?.appGroupIds.isNullOrEmpty() || plan?.appGroupId != null) 0
+            else if (!plan?.directEntries.isNullOrEmpty()) 1 else 0
         )
     }
-    var selectedGroupId by remember { mutableStateOf(plan?.appGroupId ?: FocusStore.defaultGroup()?.id) }
+    var selectedGroupIds by remember {
+        mutableStateOf(
+            plan?.appGroupIds?.toSet()
+                ?: plan?.appGroupId?.let { setOf(it) }
+                ?: setOfNotNull(FocusStore.defaultGroup()?.id)
+        )
+    }
     var directEntries by remember { mutableStateOf(plan?.directEntries ?: emptyList()) }
     var enabled by remember { mutableStateOf(plan?.enabled ?: true) }
     // 分段专注：空列表 = 连续专注（结束时间手动选择）；非空 = 分段（结束时间自动 = 开始 + 各段总和）
@@ -143,7 +151,8 @@ fun PlanEditScreenMaterial(plan: FocusPlan?, onBack: () -> Unit) {
             startMinute = startMinute,
             endMinute = finalEnd,
             weekdays = weekdays,
-            appGroupId = if (bindMode == 0) selectedGroupId else null,
+            appGroupId = if (bindMode == 0) selectedGroupIds.firstOrNull() else null,
+            appGroupIds = if (bindMode == 0) selectedGroupIds.toList() else null,
             directEntries = if (bindMode == 1) directEntries else null,
             enabled = enabled,
             segments = segs,
@@ -437,11 +446,14 @@ fun PlanEditScreenMaterial(plan: FocusPlan?, onBack: () -> Unit) {
                     if (bindMode == 0) {
                         // 应用集列表：整行可点 + 选中行高亮 + 右侧 Radio
                         groups.forEach { group ->
-                            val selected = selectedGroupId == group.id
+                            val selected = group.id in selectedGroupIds
                             Row(
                                 Modifier
                                     .fillMaxWidth()
-                                    .clickable { selectedGroupId = group.id }
+                                    .clickable {
+                                        selectedGroupIds = if (selected) selectedGroupIds - group.id
+                                        else selectedGroupIds + group.id
+                                    }
                                     .background(
                                         if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
                                         else Color.Transparent
@@ -465,7 +477,13 @@ fun PlanEditScreenMaterial(plan: FocusPlan?, onBack: () -> Unit) {
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
-                                RadioButton(selected = selected, onClick = { selectedGroupId = group.id })
+                                Checkbox(
+                                    checked = selected,
+                                    onCheckedChange = {
+                                        selectedGroupIds = if (selected) selectedGroupIds - group.id
+                                        else selectedGroupIds + group.id
+                                    },
+                                )
                             }
                         }
                     } else {

@@ -84,12 +84,16 @@ class FrostHushApp : Application() {
         }.start()
     }
 
-    /** 后台预加载应用名称全量缓存（含分身）；由 AppRoot 在进入主界面（前台）后调用 */
+    /** 后台预加载应用名称全量缓存（含分身）；由 AppRoot 在进入主界面（前台）后调用。
+     *  勿在主线程直接执行：queryApps 会跨进程查询（Shizuku 查分身），MIUI 上首次还会弹
+     *  「允许获取应用列表」确认框，主线程跑会直接卡死 UI。 */
     internal fun preloadAppNames() {
-        runCatching {
-            val full = AppRepository(this).queryApps().associate { it.entry to it.displayName }
-            if (full.isNotEmpty()) AppRepository.updateAppNameCache(full)
-        }
+        Thread {
+            runCatching {
+                val full = AppRepository(this).queryApps().associate { it.entry to it.displayName }
+                if (full.isNotEmpty()) AppRepository.updateAppNameCache(full)
+            }
+        }.start()
     }
 
     companion object {

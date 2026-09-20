@@ -93,10 +93,17 @@ fun PlanEditScreenMiuix(plan: FocusPlan?, onBack: () -> Unit) {
     // 0 = 从应用集选择，1 = 直接选择应用
     var bindMode by remember {
         mutableStateOf(
-            if (plan?.appGroupId != null) 0 else if (!plan?.directEntries.isNullOrEmpty()) 1 else 0
+            if (!plan?.appGroupIds.isNullOrEmpty() || plan?.appGroupId != null) 0
+            else if (!plan?.directEntries.isNullOrEmpty()) 1 else 0
         )
     }
-    var selectedGroupId by remember { mutableStateOf(plan?.appGroupId ?: FocusStore.defaultGroup()?.id) }
+    var selectedGroupIds by remember {
+        mutableStateOf(
+            plan?.appGroupIds?.toSet()
+                ?: plan?.appGroupId?.let { setOf(it) }
+                ?: setOfNotNull(FocusStore.defaultGroup()?.id)
+        )
+    }
     var directEntries by remember { mutableStateOf(plan?.directEntries ?: emptyList()) }
     var enabled by remember { mutableStateOf(plan?.enabled ?: true) }
     // 分段专注：空列表 = 连续专注（结束时间手动选择）；非空 = 分段（结束时间自动 = 开始 + 各段总和）
@@ -143,7 +150,8 @@ fun PlanEditScreenMiuix(plan: FocusPlan?, onBack: () -> Unit) {
             startMinute = startMinute,
             endMinute = finalEnd,
             weekdays = weekdays,
-            appGroupId = if (bindMode == 0) selectedGroupId else null,
+            appGroupId = if (bindMode == 0) selectedGroupIds.firstOrNull() else null,
+            appGroupIds = if (bindMode == 0) selectedGroupIds.toList() else null,
             directEntries = if (bindMode == 1) directEntries else null,
             enabled = enabled,
             segments = segs,
@@ -448,11 +456,14 @@ fun PlanEditScreenMiuix(plan: FocusPlan?, onBack: () -> Unit) {
                         // 应用集列表：整行可点 + 选中行高亮 + 右侧 Radio
                         Card {
                             groups.forEach { group ->
-                                val selected = selectedGroupId == group.id
+                                val selected = group.id in selectedGroupIds
                                 Row(
                                     Modifier
                                         .fillMaxWidth()
-                                        .clickable { selectedGroupId = group.id }
+                                        .clickable {
+                                            selectedGroupIds = if (selected) selectedGroupIds - group.id
+                                            else selectedGroupIds + group.id
+                                        }
                                         .background(
                                             if (selected) MiuixTheme.colorScheme.surfaceContainerHigh
                                             else Color.Transparent
@@ -477,7 +488,10 @@ fun PlanEditScreenMiuix(plan: FocusPlan?, onBack: () -> Unit) {
                                             color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                                         )
                                     }
-                                    RadioButton(selected = selected, onClick = { selectedGroupId = group.id })
+                                    RadioButton(selected = selected, onClick = {
+                                        selectedGroupIds = if (selected) selectedGroupIds - group.id
+                                        else selectedGroupIds + group.id
+                                    })
                                 }
                             }
                         }

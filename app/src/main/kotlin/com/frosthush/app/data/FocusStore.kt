@@ -361,7 +361,15 @@ object FocusStore {
         if (selectedGroupId() == id) setSelectedGroupId(null)
         // 引用该应用集的计划回退到默认集（避免绑定悬空）
         val plans = focusPlans().map { p ->
-            if (p.appGroupId == id) p.copy(appGroupId = null, directEntries = null) else p
+            when {
+                p.appGroupIds?.contains(id) == true -> {
+                    val rest = p.appGroupIds.orEmpty().filter { it != id }
+                    if (rest.isEmpty()) p.copy(appGroupId = null, appGroupIds = null, directEntries = null)
+                    else p.copy(appGroupId = rest.first(), appGroupIds = rest)
+                }
+                p.appGroupId == id -> p.copy(appGroupId = null, directEntries = null)
+                else -> p
+            }
         }
         if (plans != focusPlans()) saveFocusPlans(plans)
     }
@@ -520,6 +528,8 @@ object FocusStore {
         val endMinute: Int,
         val weekdays: Set<Int>, // 1=周一 .. 7=周日
         val appGroupId: Long? = null,
+        /** 绑定的多个应用集（新）；非空时优先于 appGroupId / directEntries */
+        val appGroupIds: List<Long>? = null,
         val directEntries: List<String>? = null,
         val enabled: Boolean = true,
         // 分段专注（专注→休息→专注…）；为空表示单段连续专注。
@@ -539,15 +549,25 @@ object FocusStore {
                 }
     }
 
-    /** 计划绑定的应用条目：应用集 → 直选 → 默认集 */
+    /** 计划绑定的应用条目：多应用集 → 单应用集 → 直选 → 默认集 */
     fun planEntries(plan: FocusPlan): List<String> = when {
+        !plan.appGroupIds.isNullOrEmpty() -> {
+            val ids = plan.appGroupIds.orEmpty()
+            appGroups().filter { it.id in ids }.flatMap { it.entries }.distinct()
+        }
         plan.appGroupId != null -> appGroups().firstOrNull { it.id == plan.appGroupId }?.entries ?: emptyList()
         !plan.directEntries.isNullOrEmpty() -> plan.directEntries.orEmpty()
         else -> defaultGroup()?.entries ?: emptyList()
     }
 
-    fun focusPlans(): List<FocusPlan> = runCatching {
-        if (!plansFile.exists()) return emptyList()
+    /** 计划列表内存缓存：AppRoot 每次重组都会读取计划，避免反复读盘 + JSON 解析 */
+    @Volatile
+    private var plansCache: List<FocusPlan>? = null
+
+    fun focusPlans(): List<FocusPlan> {
+        plansCache?.let { return it }
+        val loaded = runCatching {
+        if (!plansFile.exists()) return@runCatching emptyList()
         val json = JSONArray(plansFile.readText())
         (0 until json.length()).mapNotNull { i ->
             val obj = json.getJSONObject(i)
@@ -561,6 +581,10 @@ object FocusStore {
                     (0 until arr.length()).map { arr.getInt(it) }.toSet()
                 }.getOrDefault(emptySet()),
                 appGroupId = if (obj.has("appGroupId")) obj.getLong("appGroupId") else null,
+                appGroupIds = obj.optJSONArray("appGroupIds")?.let { a ->
+                    (0 until a.length()).map { a.getLong(it) }
+                }?.takeIf { it.isNotEmpty() }
+                    ?: if (obj.has("appGroupId")) listOf(obj.getLong("appGroupId")) else null,
                 directEntries = if (obj.has("directEntries")) {
                     runCatching {
                         val arr = obj.getJSONArray("directEntries")
@@ -576,9 +600,13 @@ object FocusStore {
                 },
             )
         }
-    }.getOrDefault(emptyList())
+        }.getOrDefault(emptyList())
+        plansCache = loaded
+        return loaded
+    }
 
     fun saveFocusPlans(plans: List<FocusPlan>) {
+        plansCache = null
         dir.mkdirs()
         plansFile.writeText(JSONArray().apply {
             plans.forEach { p ->
@@ -588,6 +616,10 @@ object FocusStore {
                     put("start", p.startMinute)
                     put("end", p.endMinute)
                     put("weekdays", JSONArray(p.weekdays))
+                    p.appGroupIds?.takeIf { it.isNotEmpty() }?.let { ids ->
+                        put("appGroupIds", JSONArray(ids))
+                        put("appGroupId", ids.first())
+                    }
                     p.appGroupId?.let { put("appGroupId", it) }
                     p.directEntries?.let { put("directEntries", JSONArray(it)) }
                     put("enabled", p.enabled)
@@ -723,6 +755,10 @@ object FocusStore {
                     put("start", p.startMinute)
                     put("end", p.endMinute)
                     put("weekdays", JSONArray(p.weekdays))
+                    p.appGroupIds?.takeIf { it.isNotEmpty() }?.let { ids ->
+                        put("appGroupIds", JSONArray(ids))
+                        put("appGroupId", ids.first())
+                    }
                     p.appGroupId?.let { put("appGroupId", it) }
                     p.directEntries?.let { put("directEntries", JSONArray(it)) }
                     put("enabled", p.enabled)
@@ -778,6 +814,10 @@ object FocusStore {
                         (0 until w.length()).map { w.getInt(it) }.toSet()
                     } ?: emptySet(),
                     appGroupId = if (o.has("appGroupId")) o.getLong("appGroupId") else null,
+                    appGroupIds = o.optJSONArray("appGroupIds")?.let { a ->
+                        (0 until a.length()).map { a.getLong(it) }
+                    }?.takeIf { it.isNotEmpty() }
+                        ?: if (o.has("appGroupId")) listOf(o.getLong("appGroupId")) else null,
                     directEntries = if (o.has("directEntries")) {
                         o.getJSONArray("directEntries").let { e -> (0 until e.length()).map { e.getString(it) } }
                     } else null,
@@ -845,8 +885,14 @@ object FocusStore {
                 p.copy(directEntries = clean)
             }
             val gid = cleaned.appGroupId
-            if (gid != null && fallbackGroupId != null && gid !in groupIds) cleaned.copy(appGroupId = fallbackGroupId)
-            else cleaned
+            val fixedGids = cleaned.appGroupIds?.takeIf { it.isNotEmpty() }?.map {
+                if (it in groupIds) it else fallbackGroupId
+            }?.filterNotNull()?.distinct()?.ifEmpty { null }
+            when {
+                fixedGids != null -> cleaned.copy(appGroupIds = fixedGids, appGroupId = fixedGids.first())
+                gid != null && fallbackGroupId != null && gid !in groupIds -> cleaned.copy(appGroupId = fallbackGroupId)
+                else -> cleaned
+            }
         })
         presets.clear()
         presets.addAll(data.presets)
@@ -1058,6 +1104,11 @@ object FocusStore {
 
     /** 计划绑定的应用集引用随新增导入重映射；引用文件里不存在的应用集时回退默认集 */
     private fun remapGroupRef(plan: FocusPlan, idMap: Map<Long, Long>): FocusPlan {
+        val ids = plan.appGroupIds
+        if (!ids.isNullOrEmpty()) {
+            val mapped = ids.mapNotNull { idMap[it] }.distinct()
+            return plan.copy(appGroupIds = mapped.ifEmpty { null }, appGroupId = mapped.firstOrNull())
+        }
         val gid = plan.appGroupId ?: return plan
         return if (gid in idMap) plan.copy(appGroupId = idMap[gid]) else plan.copy(appGroupId = null)
     }
