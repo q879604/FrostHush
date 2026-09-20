@@ -37,6 +37,8 @@ jobs:
 
       - name: Build with Gradle
         run: |
+          # wrapper 的 distributionUrl 写死腾讯镜像（作者本机国内用），境外 runner 连不上 -> 换官方源
+          sed -i 's#mirrors.cloud.tencent.com/gradle/#services.gradle.org/distributions/#g' gradle/wrapper/gradle-wrapper.properties
           if [ -n "${{ secrets.KEYSTORE }}" ]; then
             echo storeFile=../keystore.jks > signing.properties
             echo storePassword=${{ secrets.KEYSTORE_PASSWORD }} >> signing.properties
