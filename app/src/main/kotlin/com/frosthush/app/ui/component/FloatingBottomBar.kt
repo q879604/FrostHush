@@ -218,7 +218,7 @@ fun FloatingBottomBar(
     val pillShape = remember { CircleShape }
     val accentColor = MiuixTheme.colorScheme.primary
     val tabContentColor = MiuixTheme.colorScheme.onSurface
-    val containerColor = MiuixTheme.colorScheme.surfaceContainer.let {
+    val containerColor = MiuixTheme.colorScheme.surfaceContainerHigh.let {
         if (isBlurEnabled) it.copy(0.4f) else it
     }
 
@@ -384,7 +384,7 @@ fun FloatingBottomBar(
                             // 边界：底栏与页面同色系时靠一圈极淡描边把胶囊“切”出来
                             .border(
                                 width = 1.dp,
-                                color = if (isInDark) Color.White.copy(alpha = 0.10f) else Color.Black.copy(alpha = 0.07f),
+                                color = if (isInDark) Color.White.copy(alpha = 0.20f) else Color.Black.copy(alpha = 0.12f),
                                 shape = pillShape,
                             )
                     }
@@ -510,22 +510,18 @@ fun FloatingBottomBar(
                         .clip(pillShape)
                         // 液态玻璃不可用（Android 12）时的「高光玻璃面」：靠明度对比而不是彩色低透明，
                         // 深色下同样看得见；观感对齐 iOS 的选中指示器
-                        .background(
-                            Brush.verticalGradient(
-                                0f to if (isInDark) Color.White.copy(alpha = 0.20f) else Color.White.copy(alpha = 0.95f),
-                                1f to if (isInDark) Color.White.copy(alpha = 0.10f) else Color.White.copy(alpha = 0.78f),
-                            ),
-                            pillShape,
-                        )
+                        // 液态玻璃不可用（Android 12）：滑块用比底栏再亮一档的容器色，
+                        // 靠明度差把选中位置“切”出来；选中项图标用主色（蓝），中性面才不会吃掉蓝色
+                        .background(MiuixTheme.colorScheme.surfaceContainerHighest, pillShape)
                         .border(
                             width = 1.dp,
-                            color = if (isInDark) Color.White.copy(alpha = 0.24f) else Color.Black.copy(alpha = 0.09f),
+                            color = if (isInDark) Color.White.copy(alpha = 0.28f) else Color.Black.copy(alpha = 0.10f),
                             shape = pillShape,
                         )
                         .innerShadow(shape = pillShape) {
                             InnerShadow(
-                                radius = 5.dp,
-                                color = Color.White.copy(alpha = if (isInDark) 0.30f else 0.95f),
+                                radius = 4.dp,
+                                color = Color.White.copy(alpha = if (isInDark) 0.25f else 0.85f),
                                 alpha = 1f,
                             )
                         }

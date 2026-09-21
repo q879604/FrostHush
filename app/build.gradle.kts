@@ -22,7 +22,7 @@ android {
         minSdk = 23
         targetSdk = 37
         versionCode = 11
-        versionName = "1.3.2"
+        versionName = "Q1.3.2"
         // 编译时间（精确到分钟）：诊断日志导出头部 + 非正式版关于页展示
         val buildTime = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
         buildConfigField("String", "BUILD_TIME", "\"$buildTime\"")
