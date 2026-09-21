@@ -41,6 +41,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.shadow.Shadow
@@ -486,9 +487,33 @@ fun FloatingBottomBar(
                         .graphicsLayer {
                             val progressOffset = dampedDragAnimation.value * tabWidthPx
                             translationX = if (isLtr) progressOffset + panelOffset else -progressOffset + panelOffset
+                            // 跟手膛胀：液态玻璃不可用时用缩放补偿手感
+                            scaleX = dampedDragAnimation.scaleX
+                            scaleY = dampedDragAnimation.scaleY
                         }
+                        .dropShadow(
+                            shape = pillShape,
+                            shadow = Shadow(
+                                radius = 6.dp,
+                                color = Color.Black,
+                                alpha = if (isInDark) 0.45f else 0.16f,
+                            ),
+                        )
                         .clip(pillShape)
-                        .background(accentColor.copy(alpha = 0.15f), pillShape)
+                        .background(
+                            Brush.verticalGradient(
+                                0f to accentColor.copy(alpha = if (isInDark) 0.34f else 0.22f),
+                                1f to accentColor.copy(alpha = if (isInDark) 0.18f else 0.12f),
+                            ),
+                            pillShape,
+                        )
+                        .innerShadow(shape = pillShape) {
+                            InnerShadow(
+                                radius = 6.dp,
+                                color = Color.White.copy(alpha = if (isInDark) 0.18f else 0.55f),
+                                alpha = 1f,
+                            )
+                        }
                         .height(56.dp)
                         .width(tabWidthDp),
                     contentAlignment = Alignment.CenterStart,
