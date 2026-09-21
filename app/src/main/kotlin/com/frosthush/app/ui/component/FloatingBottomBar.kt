@@ -6,6 +6,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.EaseOut
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -378,7 +379,14 @@ fun FloatingBottomBar(
                             onDrawSurface = { drawRect(containerColor) },
                         )
                     } else {
-                        Modifier.background(containerColor, pillShape)
+                        Modifier
+                            .background(containerColor, pillShape)
+                            // 边界：底栏与页面同色系时靠一圈极淡描边把胶囊“切”出来
+                            .border(
+                                width = 1.dp,
+                                color = if (isInDark) Color.White.copy(alpha = 0.10f) else Color.Black.copy(alpha = 0.07f),
+                                shape = pillShape,
+                            )
                     }
                 )
                 .then(
@@ -508,6 +516,11 @@ fun FloatingBottomBar(
                                 1f to if (isInDark) Color.White.copy(alpha = 0.10f) else Color.White.copy(alpha = 0.78f),
                             ),
                             pillShape,
+                        )
+                        .border(
+                            width = 1.dp,
+                            color = if (isInDark) Color.White.copy(alpha = 0.24f) else Color.Black.copy(alpha = 0.09f),
+                            shape = pillShape,
                         )
                         .innerShadow(shape = pillShape) {
                             InnerShadow(
