@@ -494,23 +494,25 @@ fun FloatingBottomBar(
                         .dropShadow(
                             shape = pillShape,
                             shadow = Shadow(
-                                radius = 6.dp,
+                                radius = 10.dp,
                                 color = Color.Black,
-                                alpha = if (isInDark) 0.45f else 0.16f,
+                                alpha = if (isInDark) 0.55f else 0.18f,
                             ),
                         )
                         .clip(pillShape)
+                        // 液态玻璃不可用（Android 12）时的「高光玻璃面」：靠明度对比而不是彩色低透明，
+                        // 深色下同样看得见；观感对齐 iOS 的选中指示器
                         .background(
                             Brush.verticalGradient(
-                                0f to accentColor.copy(alpha = if (isInDark) 0.34f else 0.22f),
-                                1f to accentColor.copy(alpha = if (isInDark) 0.18f else 0.12f),
+                                0f to if (isInDark) Color.White.copy(alpha = 0.20f) else Color.White.copy(alpha = 0.95f),
+                                1f to if (isInDark) Color.White.copy(alpha = 0.10f) else Color.White.copy(alpha = 0.78f),
                             ),
                             pillShape,
                         )
                         .innerShadow(shape = pillShape) {
                             InnerShadow(
-                                radius = 6.dp,
-                                color = Color.White.copy(alpha = if (isInDark) 0.18f else 0.55f),
+                                radius = 5.dp,
+                                color = Color.White.copy(alpha = if (isInDark) 0.30f else 0.95f),
                                 alpha = 1f,
                             )
                         }
