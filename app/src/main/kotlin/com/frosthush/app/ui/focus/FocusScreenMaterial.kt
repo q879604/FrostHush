@@ -17,6 +17,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -61,6 +62,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -629,28 +631,38 @@ private fun TotalDurationBar(totalMinutes: Int, onClick: () -> Unit) {
 private fun AppGroupChips(version: Int) {
     // 显式以 version 为 key 重算，保证切换集合后选中态立即刷新
     val groups = remember(version) { FocusStore.appGroups() }
-    val selectedId = remember(version) { FocusStore.selectedGroup()?.id }
+    val selectedIds = remember(version) { FocusStore.selectedGroupIds() }
     val default = remember(version) { FocusStore.defaultGroup() }
+    // 未显式选择时按默认集高亮（与 blacklist() 的回退一致）
+    val effective = if (selectedIds.isEmpty()) listOfNotNull(default?.id) else selectedIds
+    val ordered = buildList {
+        default?.let { add(it) }
+        addAll(groups.filter { it.id != default?.id })
+    }
     Row(
         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        if (default != null) {
+        ordered.forEach { group ->
             GroupChip(
-                label = default.name.ifBlank { stringResource(R.string.group_default) },
-                selected = selectedId == default.id,
+                label = if (group.id == default?.id) {
+                    group.name.ifBlank { stringResource(R.string.group_default) }
+                } else group.name,
+                selected = effective.contains(group.id),
                 onClick = {
-                    FocusStore.setSelectedGroupId(default.id)
+                    // 点击：单选（沿用原有习惯）
+                    FocusStore.setSelectedGroupIds(listOf(group.id))
                     FocusManager.bumpVersion()
                 },
-            )
-        }
-        groups.filter { it.id != default?.id }.forEach { group ->
-            GroupChip(
-                label = group.name,
-                selected = selectedId == group.id,
-                onClick = {
-                    FocusStore.setSelectedGroupId(group.id)
+                onLongClick = {
+                    // 长按：多选加减（至少保留一个选中）
+                    val cur = effective.toMutableList()
+                    if (cur.contains(group.id)) {
+                        if (cur.size > 1) cur.remove(group.id)
+                    } else {
+                        cur.add(group.id)
+                    }
+                    FocusStore.setSelectedGroupIds(cur)
                     FocusManager.bumpVersion()
                 },
             )
@@ -659,19 +671,29 @@ private fun AppGroupChips(version: Int) {
 }
 
 /** 应用集 chip：选中时明显变暗（primaryContainer 填充 + 勾选图标），未选中为浅色容器 */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun GroupChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    FilterChip(
-        selected = selected,
-        onClick = onClick,
-        label = { Text(label, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal) },
-        colors = FilterChipDefaults.filterChipColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-            labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-        ),
-    )
+private fun GroupChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+) {
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = if (selected) MaterialTheme.colorScheme.primaryContainer
+        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        contentColor = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
+        else MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick),
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        )
+    }
 }
 
 /** 专注进行中：当前阶段（专注/休息）+ 剩余时间 + 已暂停应用数（不可打断，无退出入口）。
@@ -963,6 +985,18 @@ private fun FocusTimeDialog(
     var presets by remember { mutableStateOf(FocusStore.presets.toList()) }
     var showSavePreset by remember { mutableStateOf(false) }
     var showManagePresets by remember { mutableStateOf(false) }
+    // 专注对象（应用集多选）：对话框为条件组合，每次打开重新读取当前选中集
+    val dialogGroups = remember { FocusStore.appGroups() }
+    val dialogDefaultGroup = remember { FocusStore.defaultGroup() }
+    var dialogSelectedIds by remember {
+        mutableStateOf(FocusStore.selectedGroupIds().ifEmpty { listOfNotNull(dialogDefaultGroup?.id) })
+    }
+    val dialogOrderedGroups = remember(dialogGroups, dialogDefaultGroup) {
+        buildList {
+            dialogDefaultGroup?.let { add(it) }
+            addAll(dialogGroups.filter { it.id != dialogDefaultGroup?.id })
+        }
+    }
     // 正在弹时长输入对话框的段索引；-1 = 无
     var durationDialogIndex by remember { mutableIntStateOf(-1) }
     // 正在按时间段调整的段索引（点该段结束时间打开 TimePicker，时长自动反算）；-1 = 无
@@ -1028,6 +1062,43 @@ private fun FocusTimeDialog(
         containerColor = MaterialTheme.colorScheme.background,
         text = {
             Column {
+                // 专注对象（应用集多选）：点击=单选，长按=加减
+                Text(
+                    text = stringResource(R.string.plan_bind_title),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    dialogOrderedGroups.forEach { group ->
+                        GroupChip(
+                            label = if (group.id == dialogDefaultGroup?.id) {
+                                group.name.ifBlank { stringResource(R.string.group_default) }
+                            } else group.name,
+                            selected = dialogSelectedIds.contains(group.id),
+                            onClick = {
+                                dialogSelectedIds = listOf(group.id)
+                                FocusStore.setSelectedGroupIds(dialogSelectedIds)
+                                FocusManager.bumpVersion()
+                            },
+                            onLongClick = {
+                                val cur = dialogSelectedIds.toMutableList()
+                                if (cur.contains(group.id)) {
+                                    if (cur.size > 1) cur.remove(group.id)
+                                } else {
+                                    cur.add(group.id)
+                                }
+                                dialogSelectedIds = cur
+                                FocusStore.setSelectedGroupIds(cur)
+                                FocusManager.bumpVersion()
+                            },
+                        )
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
                 // 段列表：第一段为专注（主输入），其后交替休息/专注；
                 // 每行显示起止时间（基准=打开对话框时的系统时刻），结束时间可点弹 TimePicker 按时刻反算时长
                 segments.forEachIndexed { index, seg ->

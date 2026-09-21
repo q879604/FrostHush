@@ -44,6 +44,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -59,6 +60,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -659,28 +661,38 @@ private fun TotalDurationBarMiuix(totalMinutes: Int, onClick: () -> Unit) {
 private fun AppGroupChipsMiuix(version: Int) {
     // 显式以 version 为 key 重算，保证切换集合后选中态立即刷新
     val groups = remember(version) { FocusStore.appGroups() }
-    val selectedId = remember(version) { FocusStore.selectedGroup()?.id }
+    val selectedIds = remember(version) { FocusStore.selectedGroupIds() }
     val default = remember(version) { FocusStore.defaultGroup() }
+    // 未显式选择时按默认集高亮（与 blacklist() 的回退一致）
+    val effective = if (selectedIds.isEmpty()) listOfNotNull(default?.id) else selectedIds
+    val ordered = buildList {
+        default?.let { add(it) }
+        addAll(groups.filter { it.id != default?.id })
+    }
     Row(
         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        if (default != null) {
+        ordered.forEach { group ->
             AppGroupChip(
-                label = default.name.ifBlank { stringResource(R.string.group_default) },
-                selected = selectedId == default.id,
+                label = if (group.id == default?.id) {
+                    group.name.ifBlank { stringResource(R.string.group_default) }
+                } else group.name,
+                selected = effective.contains(group.id),
                 onClick = {
-                    FocusStore.setSelectedGroupId(default.id)
+                    // 点击：单选（沿用原有习惯）
+                    FocusStore.setSelectedGroupIds(listOf(group.id))
                     FocusManager.bumpVersion()
                 },
-            )
-        }
-        groups.filter { it.id != default?.id }.forEach { group ->
-            AppGroupChip(
-                label = group.name,
-                selected = selectedId == group.id,
-                onClick = {
-                    FocusStore.setSelectedGroupId(group.id)
+                onLongClick = {
+                    // 长按：多选加减（至少保留一个选中）
+                    val cur = effective.toMutableList()
+                    if (cur.contains(group.id)) {
+                        if (cur.size > 1) cur.remove(group.id)
+                    } else {
+                        cur.add(group.id)
+                    }
+                    FocusStore.setSelectedGroupIds(cur)
                     FocusManager.bumpVersion()
                 },
             )
@@ -689,24 +701,30 @@ private fun AppGroupChipsMiuix(version: Int) {
 }
 
 /** 应用集 chip：选中时用 miuix 下拉选中的容器语义色（tertiaryContainer 浅蓝 + 深色文字），未选中为中性灰胶囊 */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun AppGroupChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    Button(
-        onClick = onClick,
-        colors = if (selected) {
-            ButtonDefaults.buttonColors(
-                color = MiuixTheme.colorScheme.tertiaryContainer,
-                contentColor = MiuixTheme.colorScheme.onTertiaryContainer,
+private fun AppGroupChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+) {
+    Box(
+        Modifier
+            .clip(RoundedCornerShape(percent = 50))
+            .background(
+                if (selected) MiuixTheme.colorScheme.tertiaryContainer
+                else MiuixTheme.colorScheme.surfaceContainerHigh,
             )
-        } else {
-            ButtonDefaults.buttonColors()
-        },
-        insideMargin = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
     ) {
         Text(
             text = label,
             style = MiuixTheme.textStyles.button,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            color = if (selected) MiuixTheme.colorScheme.onTertiaryContainer
+            else MiuixTheme.colorScheme.onSurfaceContainerHigh,
         )
     }
 }
@@ -1015,6 +1033,18 @@ private fun FocusTimeDialogMiuix(
     var presets by remember { mutableStateOf(FocusStore.presets.toList()) }
     var showSavePreset by remember { mutableStateOf(false) }
     var showManagePresets by remember { mutableStateOf(false) }
+    // 专注对象（应用集多选）：以 show 为 key，每次打开对话框重新读取当前选中集
+    val dialogGroups = remember(show) { FocusStore.appGroups() }
+    val dialogDefaultGroup = remember(show) { FocusStore.defaultGroup() }
+    var dialogSelectedIds by remember(show) {
+        mutableStateOf(FocusStore.selectedGroupIds().ifEmpty { listOfNotNull(dialogDefaultGroup?.id) })
+    }
+    val dialogOrderedGroups = remember(dialogGroups, dialogDefaultGroup) {
+        buildList {
+            dialogDefaultGroup?.let { add(it) }
+            addAll(dialogGroups.filter { it.id != dialogDefaultGroup?.id })
+        }
+    }
     // 正在弹时长输入对话框的段索引；-1 = 无
     var durationDialogIndex by remember(show) { mutableIntStateOf(-1) }
     // 正在按时间段调整的段索引（点该段结束时间打开 TimePicker，时长自动反算）；-1 = 无
@@ -1067,6 +1097,43 @@ private fun FocusTimeDialogMiuix(
         onDismissRequest = onDismiss,
     ) {
         Column {
+            // 专注对象（应用集多选）：不退出对话框也能改生效集合；点击=单选，长按=加减
+            Text(
+                text = stringResource(R.string.plan_bind_title),
+                style = MiuixTheme.textStyles.subtitle,
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                dialogOrderedGroups.forEach { group ->
+                    AppGroupChip(
+                        label = if (group.id == dialogDefaultGroup?.id) {
+                            group.name.ifBlank { stringResource(R.string.group_default) }
+                        } else group.name,
+                        selected = dialogSelectedIds.contains(group.id),
+                        onClick = {
+                            dialogSelectedIds = listOf(group.id)
+                            FocusStore.setSelectedGroupIds(dialogSelectedIds)
+                            FocusManager.bumpVersion()
+                        },
+                        onLongClick = {
+                            val cur = dialogSelectedIds.toMutableList()
+                            if (cur.contains(group.id)) {
+                                if (cur.size > 1) cur.remove(group.id)
+                            } else {
+                                cur.add(group.id)
+                            }
+                            dialogSelectedIds = cur
+                            FocusStore.setSelectedGroupIds(cur)
+                            FocusManager.bumpVersion()
+                        },
+                    )
+                }
+            }
+            Spacer(Modifier.height(12.dp))
             // 段列表（可滚动，避免分段较多时溢出屏幕）：
             // 第一段为专注（主输入），其后交替休息/专注；每行显示起止时间，结束时间可点弹 TimePicker 反算时长
             Column(

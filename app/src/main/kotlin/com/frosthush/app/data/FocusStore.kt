@@ -279,7 +279,7 @@ object FocusStore {
     /** 当前选中应用集的条目（未选择时回退默认集；默认集被删则返回空列表） */
     fun blacklist(): List<String> {
         ensureMigrated()
-        return selectedGroup()?.entries ?: emptyList()
+        return selectedGroups().flatMap { it.entries }.distinct()
     }
 
     /** 写入当前选中应用集（未选择时写入默认集）；旧 blacklist.json 不再维护 */
@@ -357,8 +357,8 @@ object FocusStore {
         ensureMigrated()
         val groups = appGroups().filter { it.id != id }
         saveAppGroups(groups)
-        // 删除的是当前选中集时清除选中，回退默认集
-        if (selectedGroupId() == id) setSelectedGroupId(null)
+        // 从当前选中集中移除被删的集（全部删光时回退默认集）
+        setSelectedGroupIds(selectedGroupIds().filter { it != id })
         // 引用该应用集的计划回退到默认集（避免绑定悬空）
         val plans = focusPlans().map { p ->
             when {
@@ -385,19 +385,38 @@ object FocusStore {
     // ---------- 当前选中应用集 ----------
 
     /** 当前选中应用集的 id（未选择/被删时回退默认集） */
-    fun selectedGroupId(): Long? = runCatching {
-        if (!selectedGroupFile.exists()) return null
+    fun selectedGroupIds(): List<Long> = runCatching {
+        if (!selectedGroupFile.exists()) return emptyList()
         val json = JSONObject(selectedGroupFile.readText())
-        json.optLong("id").takeIf { it > 0 }
-    }.getOrNull()
+        if (json.has("ids")) {
+            val arr = json.optJSONArray("ids") ?: return emptyList()
+            (0 until arr.length()).map { arr.getLong(it) }.filter { it > 0 }.distinct()
+        } else {
+            json.optLong("id").takeIf { it > 0 }?.let { listOf(it) } ?: emptyList()
+        }
+    }.getOrDefault(emptyList())
 
-    fun setSelectedGroupId(id: Long?) {
+    /** 写入当前选中的应用集（可多个）；同时双写 id 字段，回滚旧版本仍能读到第一个 */
+    fun setSelectedGroupIds(ids: List<Long>) {
         dir.mkdirs()
-        if (id == null) {
+        val clean = ids.filter { it > 0 }.distinct()
+        if (clean.isEmpty()) {
             runCatching { selectedGroupFile.delete() }
         } else {
-            selectedGroupFile.writeText(JSONObject().put("id", id).toString())
+            selectedGroupFile.writeText(
+                JSONObject().apply {
+                    put("ids", JSONArray(clean))
+                    put("id", clean.first())
+                }.toString()
+            )
         }
+    }
+
+    /** 兼容旧调用：取第一个选中的应用集 */
+    fun selectedGroupId(): Long? = selectedGroupIds().firstOrNull()
+
+    fun setSelectedGroupId(id: Long?) {
+        setSelectedGroupIds(if (id == null) emptyList() else listOf(id))
     }
 
     /** 当前生效应用集：优先选中集，否则默认集 */
@@ -406,6 +425,16 @@ object FocusStore {
         val id = selectedGroupId()
         val groups = readAppGroups()
         return groups.firstOrNull { it.id == id } ?: groups.firstOrNull { it.isDefault }
+    }
+
+    /** 当前选中的所有应用集（空则回退默认集） */
+    fun selectedGroups(): List<AppGroup> {
+        ensureMigrated()
+        val ids = selectedGroupIds()
+        val groups = readAppGroups()
+        if (ids.isEmpty()) return listOfNotNull(groups.firstOrNull { it.isDefault })
+        val picked = groups.filter { it.id in ids }
+        return picked.ifEmpty { listOfNotNull(groups.firstOrNull { it.isDefault }) }
     }
 
     // ---------- 黑名单条目（应用分身支持） ----------
