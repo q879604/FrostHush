@@ -508,14 +508,15 @@ fun FloatingBottomBar(
                             ),
                         )
                         .clip(pillShape)
-                        // 液态玻璃不可用（Android 12）时的「高光玻璃面」：靠明度对比而不是彩色低透明，
-                        // 深色下同样看得见；观感对齐 iOS 的选中指示器
-                        // 液态玻璃不可用（Android 12）：滑块用比底栏再亮一档的容器色，
-                        // 靠明度差把选中位置“切”出来；选中项图标用主色（蓝），中性面才不会吃掉蓝色
-                        .background(MiuixTheme.colorScheme.surfaceContainerHighest, pillShape)
+                        // 液态玻璃不可用（Android 12）：滑块改用主色（蓝）玻璃片——中性灰在深色底上
+                        // 明度差不够、看不出选中位置；改成蓝色填充 + 更实的蓝色描边，边界一眼可见
+                        .background(
+                            accentColor.copy(alpha = if (isInDark) 0.30f else 0.20f),
+                            pillShape,
+                        )
                         .border(
-                            width = 1.dp,
-                            color = if (isInDark) Color.White.copy(alpha = 0.28f) else Color.Black.copy(alpha = 0.10f),
+                            width = 1.5.dp,
+                            color = accentColor.copy(alpha = if (isInDark) 0.85f else 0.65f),
                             shape = pillShape,
                         )
                         .innerShadow(shape = pillShape) {

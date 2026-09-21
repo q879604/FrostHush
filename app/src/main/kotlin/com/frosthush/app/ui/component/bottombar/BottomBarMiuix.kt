@@ -88,7 +88,10 @@ fun BottomBarMiuix(
                         // 各子项固有最小宽度之和；不给最小宽度会缩成文字宽度挤成一团。
                         modifier = Modifier.defaultMinSize(minWidth = 64.dp),
                     ) {
-                        Icon(imageVector = tab.icon, contentDescription = null)
+                        // 选中项常驻主色（蓝）：即使滑块不够醒目，也能一眼看出当前在哪个 tab
+                        val isCurrentTab = mainState.selectedPage == index
+                        val itemColor = if (isCurrentTab) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onSurface
+                        Icon(imageVector = tab.icon, contentDescription = null, tint = itemColor)
                         Text(
                             text = stringResource(tab.label),
                             fontSize = 11.sp,
@@ -96,6 +99,7 @@ fun BottomBarMiuix(
                             maxLines = 1,
                             softWrap = false,
                             overflow = TextOverflow.Visible,
+                            color = itemColor,
                         )
                     }
                 }

@@ -31,4 +31,4 @@ internal fun openUrl(context: Context, url: String) {
 }
 
 internal const val HAIL_URL = "https://github.com/aistra0528/Hail"
-internal const val PROJECT_URL = "https://github.com/Yizhou147/FrostHush"
+internal const val PROJECT_URL = "https://github.com/q879604/FrostHush"

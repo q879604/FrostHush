@@ -268,7 +268,7 @@
     <string name="about_hail_title">Hail</string>
     <string name="about_hail_url">github.com/aistra0528/Hail</string>
     <string name="about_project_title">FrostHush repository</string>
-    <string name="about_project_url">github.com/Yizhou147/FrostHush</string>
+    <string name="about_project_url">github.com/q879604/FrostHush</string>
     <string name="about_opensource_summary">GPL-3.0 · focus logic based on Hail\'s implementation</string>
     <string name="about_opensource">Open source notice</string>
     <string name="about_opensource_text">Hail (https://github.com/aistra0528/Hail) itself does not include a focus mode; focus mode was added on top of it. This standalone app is extracted from that feature and does not include Hail\'s freeze/stop features.</string>
