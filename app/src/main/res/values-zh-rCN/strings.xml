@@ -305,6 +305,13 @@
     <string name="plan_name">计划名称</string>
     <string name="plan_name_hint">如：工作专注、睡前放松</string>
     <string name="plan_name_required">请输入计划名称</string>
+    <string name="plan_close_cooldown_title">关闭计划前请冷静一下</string>
+    <string name="plan_close_cooldown_waiting">该计划目前不在 15 分钟内开始，但为防止误关，需要等冷静期结束。剩余 %1$d 秒。</string>
+    <string name="plan_close_cooldown_ready">冷静期已结束，现在可以关闭该计划。</string>
+    <string name="plan_close_cooldown_cancel">再想想</string>
+    <string name="plan_close_cooldown_confirm">确认关闭</string>
+    <string name="plan_close_cooldown_wait_button">等待中 %1$d s</string>
+    <string name="plan_close_blocked">该计划将在 %1$d 分钟后开始，无法关闭</string>
     <string name="plan_segments_title">中途休息</string>
     <string name="plan_segments_hint">添加休息段后，结束时间将自动按「开始 + 各段总和」计算</string>
     <string name="plan_segments_invalid">各段时长需 ≥1 分钟，总时长不能达到 24 小时</string>

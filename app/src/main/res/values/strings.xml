@@ -306,6 +306,13 @@
     <string name="plan_name">Plan name</string>
     <string name="plan_name_hint">e.g. work focus, wind down</string>
     <string name="plan_name_required">Please enter a plan name</string>
+    <string name="plan_close_cooldown_title">Cool down before closing</string>
+    <string name="plan_close_cooldown_waiting">This plan does not start within 15 minutes, but a cooldown is required to avoid accidental closing. %1$d s left.</string>
+    <string name="plan_close_cooldown_ready">Cooldown finished. You can close this plan now.</string>
+    <string name="plan_close_cooldown_cancel">Reconsider</string>
+    <string name="plan_close_cooldown_confirm">Close plan</string>
+    <string name="plan_close_cooldown_wait_button">Waiting %1$d s</string>
+    <string name="plan_close_blocked">This plan starts in %1$d min and cannot be closed</string>
     <string name="plan_segments_title">Breaks</string>
     <string name="plan_segments_hint">After adding breaks, the end time is auto-calculated as start + total segments</string>
     <string name="plan_segments_invalid">Each segment must be at least 1 minute, and the total cannot reach 24 hours</string>

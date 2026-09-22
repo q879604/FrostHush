@@ -77,6 +77,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import android.widget.Toast
 import com.frosthush.app.R
 import com.frosthush.app.data.FocusStore
 import com.frosthush.app.data.FocusStore.FocusPlan
@@ -113,6 +114,8 @@ fun PlanScreenMaterial(
     var selected by remember { mutableStateOf(setOf<Long>()) }
     // 省电未豁免提醒横幅 + 计划可靠性检查对话框
     var showReliability by remember { mutableStateOf(false) }
+    // 待进入 90 秒冷静期的计划（非空时显示关闭冷静期对话框）
+    var coolDownPlan by remember { mutableStateOf<FocusPlan?>(null) }
     var batteryExempted by remember { mutableStateOf(checkBatteryOptimization(context)) }
 
     // 跳系统设置授权省电豁免后返回：重检使横幅自动消失。
@@ -378,11 +381,28 @@ LazyColumn(
                                         }
                                     },
                                     onToggle = { enabled ->
-                                        val updated = plan.copy(enabled = enabled)
-                                        FocusStore.updateFocusPlan(updated)
-                                        if (enabled) PlanScheduler.schedulePlan(context, updated)
-                                        else PlanScheduler.cancelPlan(context, plan.id)
-                                        FocusManager.bumpVersion()
+                                        if (enabled) {
+                                            // 开启无限制
+                                            val updated = plan.copy(enabled = true)
+                                            FocusStore.updateFocusPlan(updated)
+                                            PlanScheduler.schedulePlan(context, updated)
+                                            FocusManager.bumpVersion()
+                                        } else {
+                                            // 关计划的两道闸：① 15 分钟内就要开始 → 禁止关闭；
+                                            // ② 否则先过 90 秒冷静期，倒计时归零才能确认关闭
+                                            val now = System.currentTimeMillis()
+                                            val remainingMs = PlanScheduler.nextStartMillis(plan, now) - now
+                                            if (remainingMs <= PLAN_CLOSE_BLOCK_WINDOW_MS) {
+                                                val minutes = ((remainingMs + 59_999L) / 60_000L).coerceAtLeast(0L)
+                                                Toast.makeText(
+                                                    context,
+                                                    context.getString(R.string.plan_close_blocked, minutes),
+                                                    Toast.LENGTH_SHORT,
+                                                ).show()
+                                            } else {
+                                                coolDownPlan = plan
+                                            }
+                                        }
                                     },
                                 )
                                 HorizontalDivider()
@@ -402,6 +422,21 @@ LazyColumn(
             batteryExempted = checkBatteryOptimization(context)
         })
     }
+
+    // 关闭计划的 90 秒冷静期（计划不在 15 分钟内开始时才走到这里）
+    PlanCloseCooldownDialog(
+        plan = coolDownPlan,
+        onDismiss = { coolDownPlan = null },
+        onConfirm = {
+            coolDownPlan?.let { target ->
+                val updated = target.copy(enabled = false)
+                FocusStore.updateFocusPlan(updated)
+                PlanScheduler.cancelPlan(context, target.id)
+                FocusManager.bumpVersion()
+            }
+            coolDownPlan = null
+        },
+    )
 }
 
 /** 计划绑定的展示文案：应用集名（带「应用集：」前缀，多个用顿号连接）/ 直选数 / 默认集 */
