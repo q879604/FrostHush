@@ -126,7 +126,7 @@ fun AppGroupScreenMaterial(onBack: () -> Unit) {
         groupId = id,
         now = System.currentTimeMillis(),
         executedToday = { FocusStore.planExecutedDay(it.id) == FocusStore.todayCode() },
-        appointmentAt = FocusStore.groupAppointment(id),
+        appointmentAt = FocusStore.groupAppointment(),
     ).allowed
 
     /** 所选分类里第一个还没放行的（需要先预约的那个） */
@@ -559,7 +559,7 @@ private fun GroupEditScreen(
                 groupId = current.id,
                 now = System.currentTimeMillis(),
                 executedToday = { FocusStore.planExecutedDay(it.id) == FocusStore.todayCode() },
-                appointmentAt = FocusStore.groupAppointment(current.id),
+                appointmentAt = FocusStore.groupAppointment(),
             )
             if (!verdict.allowed) {
                 guardSession++

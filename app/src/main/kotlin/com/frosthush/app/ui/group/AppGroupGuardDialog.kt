@@ -72,7 +72,7 @@ internal fun AppGroupGuardDialog(
     val executedToday: (FocusStore.FocusPlan) -> Boolean = {
         FocusStore.planExecutedDay(it.id) == FocusStore.todayCode()
     }
-    val appointmentAt = FocusStore.groupAppointment(group.id)
+    val appointmentAt = FocusStore.groupAppointment()
     val guarders = AppGroupGuard.guardingPlans(plans, group.id, now, executedToday).map { it.name }
     val verdict = AppGroupGuard.evaluate(plans, group.id, now, executedToday, appointmentAt)
     val windowLeft = AppGroupGuard.windowLeftMillis(appointmentAt, now)
@@ -87,7 +87,7 @@ internal fun AppGroupGuardDialog(
             guarders = guarders,
             onDismiss = onDismiss,
             onReserved = {
-                FocusStore.setGroupAppointment(group.id, System.currentTimeMillis())
+                FocusStore.setGroupAppointment(System.currentTimeMillis())
                 Toast.makeText(context, R.string.group_guard_reserved, Toast.LENGTH_SHORT).show()
             },
             onCommit = onCommit,
@@ -102,7 +102,7 @@ internal fun AppGroupGuardDialog(
             guarders = guarders,
             onDismiss = onDismiss,
             onReserved = {
-                FocusStore.setGroupAppointment(group.id, System.currentTimeMillis())
+                FocusStore.setGroupAppointment(System.currentTimeMillis())
                 Toast.makeText(context, R.string.group_guard_reserved, Toast.LENGTH_SHORT).show()
             },
             onCommit = onCommit,

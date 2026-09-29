@@ -126,7 +126,7 @@ fun AppGroupScreenMiuix(onBack: () -> Unit) {
         groupId = id,
         now = System.currentTimeMillis(),
         executedToday = { FocusStore.planExecutedDay(it.id) == FocusStore.todayCode() },
-        appointmentAt = FocusStore.groupAppointment(id),
+        appointmentAt = FocusStore.groupAppointment(),
     ).allowed
 
     /** 所选分类里第一个还没放行的（需要先预约的那个） */
@@ -237,23 +237,26 @@ fun AppGroupScreenMiuix(onBack: () -> Unit) {
                 hasReferenced = selected.any { it in referencedGroupIds },
                 onDismissConfirmDelete = { confirmDelete = false },
                 onConfirmDelete = { requestDelete() },
+                // ⚠ 守卫对话框必须由 GroupListContentMiuix 渲染在它的 Scaffold 内容里：
+                // miuix 的 OverlayDialog 依赖 Scaffold 提供的 popup host，放在本函数顶层
+                // （只是那个 Scaffold 的兄弟位置）会**静默不显示** —— 确认删除后毫无反应。
+                dialogSlot = {
+                    AppGroupGuardDialog(
+                        show = guardVisible,
+                        session = guardSession,
+                        group = guardTarget,
+                        action = AppGroupGuardAction.DELETE_GROUP,
+                        onDismiss = { guardVisible = false },
+                        onCommit = {
+                            guardVisible = false
+                            guardTarget = null
+                            doDeleteSelected()
+                        },
+                    )
+                },
             )
         }
     }
-
-    // 分类「减法」守卫对话框：被今日计划引用的分类需先预约（45 分钟等待 + 25 分钟窗口）
-    AppGroupGuardDialog(
-        show = guardVisible,
-        session = guardSession,
-        group = guardTarget,
-        action = AppGroupGuardAction.DELETE_GROUP,
-        onDismiss = { guardVisible = false },
-        onCommit = {
-            guardVisible = false
-            guardTarget = null
-            doDeleteSelected()
-        },
-    )
 }
 
 /** 应用集列表页（含多选操作栏 + 长按拖拽排序） */
@@ -277,6 +280,8 @@ private fun GroupListContentMiuix(
     hasReferenced: Boolean,
     onDismissConfirmDelete: () -> Unit,
     onConfirmDelete: () -> Unit,
+    /** 由调用方注入的对话框（分类守卫）：必须渲染在 Scaffold 内容里，见 AppGroupScreenMiuix */
+    dialogSlot: @Composable () -> Unit = {},
 ) {
     val scrollBehavior = MiuixScrollBehavior()
     Scaffold(
@@ -429,6 +434,9 @@ LazyColumn(
                     )
                 }
             }
+
+            // 分类「减法」守卫对话框（与删除确认弹窗同处 Scaffold 内容内，由 popup host 渲染）
+            dialogSlot()
         }
     }
 }
@@ -567,7 +575,7 @@ private fun GroupEditScreenMiuix(
                 groupId = current.id,
                 now = System.currentTimeMillis(),
                 executedToday = { FocusStore.planExecutedDay(it.id) == FocusStore.todayCode() },
-                appointmentAt = FocusStore.groupAppointment(current.id),
+                appointmentAt = FocusStore.groupAppointment(),
             )
             if (!verdict.allowed) {
                 guardSession++
@@ -685,20 +693,22 @@ private fun GroupEditScreenMiuix(
                     }
                     Spacer(Modifier.height(24.dp))
                 }
+
+                // 移除应用守卫对话框：仅「去掉应用」时才可能弹（纯添加不受限）。
+                // ⚠ 必须放在 Scaffold 内容里：miuix 的 OverlayDialog 依赖 Scaffold 提供的
+                // popup host，放在函数顶层（Scaffold 的兄弟位置）会**静默不显示**，点保存毫无反应。
+                AppGroupGuardDialog(
+                    show = guardVisible,
+                    session = guardSession,
+                    group = group,
+                    action = AppGroupGuardAction.REMOVE_APPS,
+                    onDismiss = { guardVisible = false },
+                    onCommit = {
+                        guardVisible = false
+                        commit()
+                    },
+                )
             }
         }
     }
-
-    // 移除应用守卫对话框：仅「去掉应用」时才可能弹（纯添加不受限）
-    AppGroupGuardDialog(
-        show = guardVisible,
-        session = guardSession,
-        group = group,
-        action = AppGroupGuardAction.REMOVE_APPS,
-        onDismiss = { guardVisible = false },
-        onCommit = {
-            guardVisible = false
-            commit()
-        },
-    )
 }

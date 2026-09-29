@@ -226,7 +226,7 @@ fun FocusScreenMiuix(
             groupId = target.id,
             now = System.currentTimeMillis(),
             executedToday = { FocusStore.planExecutedDay(it.id) == FocusStore.todayCode() },
-            appointmentAt = FocusStore.groupAppointment(target.id),
+            appointmentAt = FocusStore.groupAppointment(),
         )
         if (verdict.allowed) {
             removeSelectedFromGroup()

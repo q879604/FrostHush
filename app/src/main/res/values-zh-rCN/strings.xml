@@ -340,10 +340,10 @@
     <string name="group_guard_state_ready">预约已生效，剩余 %1$s</string>
     <string name="group_guard_wait_button">等待中 %1$s</string>
     <string name="group_guard_reserve">预约</string>
-    <string name="group_guard_reserved">预约成功：45 分钟后可修改，25 分钟内有效</string>
+    <string name="group_guard_reserved">预约成功：45 分钟后可修改任意分类，25 分钟内有效</string>
     <string name="group_guard_confirm_remove">确认移出</string>
     <string name="group_guard_confirm_delete">确认删除</string>
-    <string name="group_guard_note">仅「添加应用」不受限制；预约满 45 分钟后有 25 分钟，可自由增删应用或删除分类</string>
+    <string name="group_guard_note">仅「添加应用」不受限制；预约满 45 分钟后有 25 分钟，可自由增删应用或删除分类（一次预约解锁所有分类）</string>
     <!-- 冷静期期间滚动展示的励志语录 -->
     <string-array name="plan_cooldown_quotes">
         <item>再坚持一下，你比自己想象的更能扛。</item>

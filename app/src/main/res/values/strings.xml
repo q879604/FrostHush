@@ -344,7 +344,7 @@
     <string name="group_guard_reserved">Booked: editable in 45 minutes, valid for 25 minutes</string>
     <string name="group_guard_confirm_remove">Remove</string>
     <string name="group_guard_confirm_delete">Delete</string>
-    <string name="group_guard_note">Adding apps is never restricted; after the 45-minute wait you get a 25-minute window to add or remove apps, or to delete the category</string>
+    <string name="group_guard_note">Adding apps is never restricted; after the 45-minute wait you get a 25-minute window to add or remove apps, or to delete the category (one appointment unlocks every category)</string>
     <string-array name="plan_cooldown_quotes">
         <item>Hold on a little longer — you are tougher than you think.</item>
         <item>Every focused minute now is confidence later.</item>
