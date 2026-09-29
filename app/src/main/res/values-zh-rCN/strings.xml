@@ -331,6 +331,19 @@
     <string name="plan_appointment_reserved">预约成功：1 小时后可操作，30 分钟内有效</string>
     <string name="plan_appointment_confirm_close">确认关闭</string>
     <string name="plan_appointment_confirm_delete">确认删除</string>
+    <string name="group_guard_title_remove">移出应用前请先预约</string>
+    <string name="group_guard_title_delete">删除分类前请先预约</string>
+    <string name="group_guard_summary">分类「%1$s」正被今天要执行的计划使用：%2$s</string>
+    <string name="group_guard_state_need">尚未预约</string>
+    <string name="group_guard_state_waiting">预约中，还需 %1$s</string>
+    <string name="group_guard_state_expired">预约已过期，需重新预约</string>
+    <string name="group_guard_state_ready">预约已生效，剩余 %1$s</string>
+    <string name="group_guard_wait_button">等待中 %1$s</string>
+    <string name="group_guard_reserve">预约</string>
+    <string name="group_guard_reserved">预约成功：45 分钟后可修改，25 分钟内有效</string>
+    <string name="group_guard_confirm_remove">确认移出</string>
+    <string name="group_guard_confirm_delete">确认删除</string>
+    <string name="group_guard_note">仅「添加应用」不受限制；预约满 45 分钟后有 25 分钟，可自由增删应用或删除分类</string>
     <!-- 冷静期期间滚动展示的励志语录 -->
     <string-array name="plan_cooldown_quotes">
         <item>再坚持一下，你比自己想象的更能扛。</item>

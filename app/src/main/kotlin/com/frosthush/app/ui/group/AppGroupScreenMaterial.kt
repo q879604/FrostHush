@@ -59,6 +59,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -79,6 +80,7 @@ import com.frosthush.app.R
 import com.frosthush.app.data.AppRepository
 import com.frosthush.app.data.FocusStore
 import com.frosthush.app.data.FocusStore.AppGroup
+import com.frosthush.app.focus.AppGroupGuard
 import com.frosthush.app.focus.FocusManager
 import com.frosthush.app.ui.AppIcon
 import com.frosthush.app.ui.AppSelectScreen
@@ -113,6 +115,25 @@ fun AppGroupScreenMaterial(onBack: () -> Unit) {
         FocusStore.focusPlans().flatMap { p -> p.appGroupIds ?: listOfNotNull(p.appGroupId) }.toSet()
     }
 
+    // 分类「减法」守卫：被「今天会执行的启用计划」引用的分类，移除应用 / 删除分类前需先预约
+    var guardTarget by remember { mutableStateOf<AppGroup?>(null) }
+    var guardVisible by remember { mutableStateOf(false) }
+    var guardSession by remember { mutableIntStateOf(0) }
+
+    /** 该分类当前是否已放行「减法」（没被今日计划引用，或预约已在 25 分钟窗口内） */
+    fun groupGuardAllowed(id: Long): Boolean = AppGroupGuard.evaluate(
+        plans = FocusStore.focusPlans(),
+        groupId = id,
+        now = System.currentTimeMillis(),
+        executedToday = { FocusStore.planExecutedDay(it.id) == FocusStore.todayCode() },
+        appointmentAt = FocusStore.groupAppointment(id),
+    ).allowed
+
+    /** 所选分类里第一个还没放行的（需要先预约的那个） */
+    fun firstGatedSelected(): AppGroup? = selected
+        .mapNotNull { id -> groups.firstOrNull { it.id == id } }
+        .firstOrNull { !groupGuardAllowed(it.id) }
+
     fun doDeleteSelected() {
         selected.forEach { FocusStore.deleteAppGroup(it) }
         // 删除默认集后提示回退为空集
@@ -129,6 +150,20 @@ fun AppGroupScreenMaterial(onBack: () -> Unit) {
         refreshKey++
         confirmDelete = false
     }
+
+    /** 点「确认删除」后：选中的分类里若有被今日计划引用的，先过预约闸再删 */
+    fun requestDelete() {
+        val gated = firstGatedSelected()
+        if (gated == null) {
+            doDeleteSelected()
+        } else {
+            confirmDelete = false
+            guardTarget = gated
+            guardSession++
+            guardVisible = true
+        }
+    }
+
 
     /** 拖拽排序：拖动期间只更新内存顺序，松手/取消时由 onDragFinished 统一持久化
      *  （每次换位同步写文件在 FUSE 存储上可达上百毫秒且阻塞主线程，体感为断触） */
@@ -216,7 +251,7 @@ fun AppGroupScreenMaterial(onBack: () -> Unit) {
                 )
             },
             confirmButton = {
-                TextButton(onClick = { doDeleteSelected() }) {
+                TextButton(onClick = { requestDelete() }) {
                     Text(stringResource(R.string.action_confirm))
                 }
             },
@@ -227,6 +262,20 @@ fun AppGroupScreenMaterial(onBack: () -> Unit) {
             },
         )
     }
+
+    // 分类「减法」守卫对话框：被今日计划引用的分类需先预约（45 分钟等待 + 25 分钟窗口）
+    AppGroupGuardDialog(
+        show = guardVisible,
+        session = guardSession,
+        group = guardTarget,
+        action = AppGroupGuardAction.DELETE_GROUP,
+        onDismiss = { guardVisible = false },
+        onCommit = {
+            guardVisible = false
+            guardTarget = null
+            doDeleteSelected()
+        },
+    )
 }
 
 /** 应用集列表页（含多选操作栏 + 长按拖拽排序） */
@@ -475,21 +524,50 @@ private fun GroupEditScreen(
         }
     }
 
+    // 分类「减法」守卫：本次保存若「去掉了应用」且该分类被今日计划引用，需先预约
+    var guardVisible by remember { mutableStateOf(false) }
+    var guardSession by remember { mutableIntStateOf(0) }
+
+    /** 真正的落盘（过了守卫闸后调用） */
+    fun commit() {
+        val current = group
+        if (current == null) {
+            // 新建应用集默认为非默认
+            FocusStore.addAppGroup(name, entries)
+        } else {
+            // 新设为默认时先清除其他集的默认标记，再保存本集的名称/条目/默认标记
+            if (isDefault && !current.isDefault) FocusStore.setDefaultGroup(current.id)
+            FocusStore.updateAppGroup(
+                current.copy(name = name.trim(), entries = entries, isDefault = isDefault)
+            )
+        }
+        FocusManager.bumpVersion()
+        onSaved()
+    }
+
     fun save() {
         if (name.isBlank()) {
             Toast.makeText(context, context.getString(R.string.group_name_required), Toast.LENGTH_SHORT).show()
             return
         }
-        if (group == null) {
-            // 新建应用集默认为非默认
-            FocusStore.addAppGroup(name, entries)
-        } else {
-            // 新设为默认时先清除其他集的默认标记，再保存本集的名称/条目/默认标记
-            if (isDefault && !group.isDefault) FocusStore.setDefaultGroup(group.id)
-            FocusStore.updateAppGroup(group.copy(name = name.trim(), entries = entries, isDefault = isDefault))
+        // 只有「去掉应用」才需要预约：纯添加、只改名、只切换默认集都直接放行
+        val current = group
+        val removed = if (current == null) emptyList() else current.entries.filterNot { it in entries }
+        if (current != null && removed.isNotEmpty()) {
+            val verdict = AppGroupGuard.evaluate(
+                plans = FocusStore.focusPlans(),
+                groupId = current.id,
+                now = System.currentTimeMillis(),
+                executedToday = { FocusStore.planExecutedDay(it.id) == FocusStore.todayCode() },
+                appointmentAt = FocusStore.groupAppointment(current.id),
+            )
+            if (!verdict.allowed) {
+                guardSession++
+                guardVisible = true
+                return
+            }
         }
-        FocusManager.bumpVersion()
-        onSaved()
+        commit()
     }
 
     // 表单 ↔ 应用选择页淡入淡出过渡
@@ -596,4 +674,17 @@ private fun GroupEditScreen(
             }
         }
     }
+
+    // 移除应用守卫对话框：仅「去掉应用」时才可能弹（纯添加不受限）
+    AppGroupGuardDialog(
+        show = guardVisible,
+        session = guardSession,
+        group = group,
+        action = AppGroupGuardAction.REMOVE_APPS,
+        onDismiss = { guardVisible = false },
+        onCommit = {
+            guardVisible = false
+            commit()
+        },
+    )
 }

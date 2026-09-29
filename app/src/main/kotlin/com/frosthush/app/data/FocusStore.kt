@@ -31,6 +31,7 @@ object FocusStore {
     private val plansFile by lazy { File(dir, "focusPlans.json") }
     private val planExecutedFile by lazy { File(dir, "planExecuted.json") }
     private val planAppointmentsFile by lazy { File(dir, "planAppointments.json") }
+    private val groupAppointmentsFile by lazy { File(dir, "groupAppointments.json") }
 
     /** 时长有效范围（分钟） */
     const val MIN_MINUTES = 1
@@ -356,6 +357,7 @@ object FocusStore {
 
     fun deleteAppGroup(id: Long) {
         ensureMigrated()
+        clearGroupAppointment(id)
         val groups = appGroups().filter { it.id != id }
         saveAppGroups(groups)
         // 从当前选中集中移除被删的集（全部删光时回退默认集）
@@ -762,6 +764,48 @@ object FocusStore {
             val json = JSONArray(planAppointmentsFile.readText())
             val list = (0 until json.length()).map { json.getJSONObject(it) }.filter { it.getLong("id") != planId }
             planAppointmentsFile.writeText(JSONArray(list).toString())
+        }
+    }
+
+    // ---------- 应用集「预约修改」（被今天会执行的计划引用的分类需先预约） ----------
+    //
+    // 与计划预约同样落盘：45 分钟等待期内应用大概率被切到后台甚至被回收，
+    // 只存内存会让用户等满 45 分钟回来发现"没预约过"。
+
+    /** 应用集已存的预约时刻（毫秒）；未预约返回 null */
+    fun groupAppointment(groupId: Long): Long? = runCatching {
+        if (!groupAppointmentsFile.exists()) return null
+        val json = JSONArray(groupAppointmentsFile.readText())
+        for (i in 0 until json.length()) {
+            val obj = json.getJSONObject(i)
+            if (obj.getLong("id") == groupId) return obj.getLong("at")
+        }
+        null
+    }.getOrNull()
+
+    /** 写入应用集预约时刻（同一应用集只保留最新一次） */
+    fun setGroupAppointment(groupId: Long, at: Long) {
+        dir.mkdirs()
+        val list = runCatching {
+            val json = JSONArray(groupAppointmentsFile.readText())
+            (0 until json.length()).map { json.getJSONObject(it) }
+                .filter { it.getLong("id") != groupId }.toMutableList()
+        }.getOrDefault(mutableListOf())
+        list.add(JSONObject().put("id", groupId).put("at", at))
+        groupAppointmentsFile.writeText(JSONArray(list).toString())
+    }
+
+    /**
+     * 清除应用集预约。
+     * 注意：**修改成功时不清**——25 分钟窗口内要允许反复增删，清掉等于每次都要重新预约。
+     * 只在应用集被删除时清理，避免遗留悬空记录。
+     */
+    fun clearGroupAppointment(groupId: Long) {
+        runCatching {
+            if (!groupAppointmentsFile.exists()) return
+            val json = JSONArray(groupAppointmentsFile.readText())
+            val list = (0 until json.length()).map { json.getJSONObject(it) }.filter { it.getLong("id") != groupId }
+            groupAppointmentsFile.writeText(JSONArray(list).toString())
         }
     }
 

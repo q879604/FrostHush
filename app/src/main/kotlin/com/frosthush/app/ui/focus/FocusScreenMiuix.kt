@@ -87,9 +87,12 @@ import com.frosthush.app.R
 import com.frosthush.app.data.AppRepository
 import com.frosthush.app.data.FocusStore
 import com.frosthush.app.data.SettingsStore
+import com.frosthush.app.focus.AppGroupGuard
 import com.frosthush.app.focus.FocusManager
 import com.frosthush.app.focus.PlanScheduler
 import com.frosthush.app.focus.ShizukuManager
+import com.frosthush.app.ui.group.AppGroupGuardAction
+import com.frosthush.app.ui.group.AppGroupGuardDialog
 import com.frosthush.app.ui.AppIcon
 import com.frosthush.app.ui.WarningDefaults
 import com.frosthush.app.ui.DEFAULT_FOCUS_MINUTES
@@ -196,6 +199,43 @@ fun FocusScreenMiuix(
     var query by remember { mutableStateOf("") }
     var selectionMode by remember { mutableStateOf(false) }
     var selected by remember { mutableStateOf(setOf<String>()) }
+
+    // 分类「减法」守卫：从当前分类移除应用前，若该分类被「今天会执行的启用计划」引用，需先预约
+    var groupGuardTarget by remember { mutableStateOf<FocusStore.AppGroup?>(null) }
+    var groupGuardVisible by remember { mutableStateOf(false) }
+    var groupGuardSession by remember { mutableIntStateOf(0) }
+
+    /** 长按多选「移出应用」的实际动作：从当前选中的应用集里删掉这些条目 */
+    fun removeSelectedFromGroup() {
+        FocusStore.saveBlacklist(blacklist.filter { it !in selected })
+        FocusManager.bumpVersion()
+        selected = emptySet()
+        selectionMode = false
+    }
+
+    /** 移出前判定：目标分类被今日计划引用且预约未生效 → 先弹预约对话框，否则直接移出 */
+    fun requestRemoveSelected() {
+        val targetId = FocusStore.selectedGroupId() ?: FocusStore.defaultGroup()?.id
+        val target = targetId?.let { id -> FocusStore.appGroups().firstOrNull { it.id == id } }
+        if (target == null) {
+            removeSelectedFromGroup()
+            return
+        }
+        val verdict = AppGroupGuard.evaluate(
+            plans = FocusStore.focusPlans(),
+            groupId = target.id,
+            now = System.currentTimeMillis(),
+            executedToday = { FocusStore.planExecutedDay(it.id) == FocusStore.todayCode() },
+            appointmentAt = FocusStore.groupAppointment(target.id),
+        )
+        if (verdict.allowed) {
+            removeSelectedFromGroup()
+        } else {
+            groupGuardTarget = target
+            groupGuardSession++
+            groupGuardVisible = true
+        }
+    }
     // 顶栏搜索图标控制搜索框显隐（对齐雹的 SearchView 展开）
     var showSearch by remember { mutableStateOf(false) }
     // 打开搜索时自动聚焦输入框并呼出键盘（对齐雹 SearchView）
@@ -484,12 +524,7 @@ fun FocusScreenMiuix(
                     },
                     onSelectAll = { visible -> selected = visible },
                     onClearSelection = { selected = emptySet() },
-                    onDeleteSelected = {
-                        FocusStore.saveBlacklist(blacklist.filter { it !in selected })
-                        FocusManager.bumpVersion()
-                        selected = emptySet()
-                        selectionMode = false
-                    },
+                    onDeleteSelected = { requestRemoveSelected() },
                     onExitSelection = {
                         selectionMode = false
                         selected = emptySet()
@@ -499,6 +534,21 @@ fun FocusScreenMiuix(
                 )
             }
         }
+
+
+    // 分类「减法」守卫对话框：移除应用被今日计划保护时需先预约（45 分钟等待 + 25 分钟窗口）
+    AppGroupGuardDialog(
+        show = groupGuardVisible,
+        session = groupGuardSession,
+        group = groupGuardTarget,
+        action = AppGroupGuardAction.REMOVE_APPS,
+        onDismiss = { groupGuardVisible = false },
+        onCommit = {
+            groupGuardVisible = false
+            groupGuardTarget = null
+            removeSelectedFromGroup()
+        },
+    )
 
         // ---------- 对话框（OverlayDialog 需置于 Scaffold 内容内由 popup host 渲染） ----------
         FocusTimeDialogMiuix(

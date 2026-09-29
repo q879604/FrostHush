@@ -332,6 +332,19 @@
     <string name="plan_appointment_reserved">Booked: available in 1 hour, valid for 30 minutes</string>
     <string name="plan_appointment_confirm_close">Close plan</string>
     <string name="plan_appointment_confirm_delete">Delete plan</string>
+    <string name="group_guard_title_remove">Appointment required before removing apps</string>
+    <string name="group_guard_title_delete">Appointment required before deleting the category</string>
+    <string name="group_guard_summary">Category \"%1$s\" is used by plans running today: %2$s</string>
+    <string name="group_guard_state_need">Not booked yet</string>
+    <string name="group_guard_state_waiting">Booked, %1$s to go</string>
+    <string name="group_guard_state_expired">Appointment expired, book again</string>
+    <string name="group_guard_state_ready">Appointment active, %1$s left</string>
+    <string name="group_guard_wait_button">Waiting %1$s</string>
+    <string name="group_guard_reserve">Book</string>
+    <string name="group_guard_reserved">Booked: editable in 45 minutes, valid for 25 minutes</string>
+    <string name="group_guard_confirm_remove">Remove</string>
+    <string name="group_guard_confirm_delete">Delete</string>
+    <string name="group_guard_note">Adding apps is never restricted; after the 45-minute wait you get a 25-minute window to add or remove apps, or to delete the category</string>
     <string-array name="plan_cooldown_quotes">
         <item>Hold on a little longer — you are tougher than you think.</item>
         <item>Every focused minute now is confidence later.</item>
