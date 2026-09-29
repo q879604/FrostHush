@@ -12,6 +12,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import android.widget.Toast
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -26,6 +27,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.frosthush.app.R
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextField
@@ -34,6 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.width
 import com.frosthush.app.data.SettingsStore
+import com.frosthush.app.focus.DeviceAdmin
 import com.frosthush.app.focus.FocusManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -48,6 +52,7 @@ import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Blocklist
 import top.yukonga.miuix.kmp.icon.extended.Folder
 import top.yukonga.miuix.kmp.icon.extended.Info
+import top.yukonga.miuix.kmp.icon.extended.Lock
 import top.yukonga.miuix.kmp.icon.extended.Refresh
 import top.yukonga.miuix.kmp.icon.extended.ScreenMirroring
 import top.yukonga.miuix.kmp.icon.extended.Unlock
@@ -89,6 +94,23 @@ fun SettingsScreenMiuix(
     var restoreCount by remember { mutableStateOf(0) }
     var showRestoreConfirm by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    // 设备管理员（增强保活）：开关状态以系统为准，不做本地记忆，
+    // 从系统「激活设备管理员」页返回后重新查询，用户取消激活时开关自动回落。
+    var deviceAdminActive by remember { mutableStateOf(DeviceAdmin.isActive(context)) }
+    // 必须观察 Activity 的生命周期——NavDisplay 的 entry 生命周期恒为 RESUMED，
+    // 从系统页返回前台时不会重发 ON_RESUME，挂在 LocalLifecycleOwner 上不生效。
+    val activityOwner = remember(context) {
+        var ctx: android.content.Context = context
+        while (ctx is android.content.ContextWrapper && ctx !is androidx.lifecycle.LifecycleOwner) ctx = ctx.baseContext
+        ctx as? androidx.lifecycle.LifecycleOwner
+    }
+    DisposableEffect(activityOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) deviceAdminActive = DeviceAdmin.isActive(context)
+        }
+        activityOwner?.lifecycle?.addObserver(observer)
+        onDispose { activityOwner?.lifecycle?.removeObserver(observer) }
+    }
 
     /** 检测是否有应用仍被暂停（Shizuku 崩溃等导致专注结束后未能解冻），有则弹确认 */
     fun checkSuspended() {
@@ -174,6 +196,22 @@ fun SettingsScreenMiuix(
                     summary = stringResource(R.string.settings_restore_suspended_summary),
                     startAction = { SettingIcon(MiuixIcons.Unlock) },
                     onClick = { checkSuspended() },
+                )
+                // 增强保活：成为设备管理员后系统不允许「强行停止」本应用，卸载前必须先取消激活
+                SwitchPreference(
+                    checked = deviceAdminActive,
+                    onCheckedChange = { want ->
+                        if (want) {
+                            // 跳系统「激活设备管理员」确认页；返回后由 ON_RESUME 重查真实状态
+                            runCatching { context.startActivity(DeviceAdmin.activationIntent(context)) }
+                        } else {
+                            DeviceAdmin.deactivate(context)
+                            deviceAdminActive = DeviceAdmin.isActive(context)
+                        }
+                    },
+                    title = stringResource(R.string.settings_device_admin),
+                    summary = stringResource(R.string.settings_device_admin_summary),
+                    startAction = { SettingIcon(MiuixIcons.Lock) },
                 )
             }
             // 底部：数据 / 重新查看引导

@@ -313,6 +313,39 @@
     <string name="plan_close_cooldown_confirm">Close plan</string>
     <string name="plan_close_cooldown_wait_button">Waiting %1$d s</string>
     <string name="plan_close_blocked">This plan starts in %1$d min and cannot be closed</string>
+    <string name="plan_delete_cooldown_title">Cool down before deleting</string>
+    <string name="plan_delete_cooldown_ready">Cooldown finished. You can delete this plan now.</string>
+    <string name="plan_delete_cooldown_confirm">Delete plan</string>
+    <string name="plan_delete_blocked">This plan starts in %1$d min and cannot be deleted</string>
+    <string name="plan_cooldown_targets">Target: %1$s</string>
+    <!-- Plans running today: an appointment is required before closing/deleting them -->
+    <string name="plan_appointment_title">An appointment is required for today\'s plan</string>
+    <string name="plan_appointment_summary">This plan runs today. To avoid an impulsive change, book an appointment first: once the 1-hour wait is over you have 30 minutes to close or delete it; past that window you must book again.</string>
+    <string name="plan_appointment_state_need">Not booked yet</string>
+    <string name="plan_appointment_state_waiting">Booked, available in %1$s</string>
+    <string name="plan_appointment_state_expired">Appointment expired, book again</string>
+    <string name="plan_appointment_state_ready">Appointment active, %1$s left</string>
+    <string name="plan_appointment_state_blocked">Starts in %1$d min, cannot change</string>
+    <string name="plan_appointment_state_direct">Ready now</string>
+    <string name="plan_appointment_wait_button">Waiting %1$s</string>
+    <string name="plan_appointment_reserve">Book</string>
+    <string name="plan_appointment_reserved">Booked: available in 1 hour, valid for 30 minutes</string>
+    <string name="plan_appointment_confirm_close">Close plan</string>
+    <string name="plan_appointment_confirm_delete">Delete plan</string>
+    <string-array name="plan_cooldown_quotes">
+        <item>Hold on a little longer — you are tougher than you think.</item>
+        <item>Every focused minute now is confidence later.</item>
+        <item>Don\'t rush. Just finish the one thing in front of you.</item>
+        <item>Slow is fine. Stopping is not.</item>
+        <item>You don\'t have to be great to start; you start to become great.</item>
+        <item>Feelings pass. Habits stay.</item>
+        <item>The moment you want to quit is the moment that counts most.</item>
+        <item>Ten more minutes today, one less hesitation tomorrow.</item>
+        <item>What sets you apart is holding on when others let go.</item>
+        <item>One thing at a time is already fast enough.</item>
+        <item>Discipline is a muscle, and you are training it right now.</item>
+        <item>Don\'t let a three-minute mood undo three hours of work.</item>
+    </string-array>
     <string name="plan_segments_title">Breaks</string>
     <string name="plan_segments_hint">After adding breaks, the end time is auto-calculated as start + total segments</string>
     <string name="plan_segments_invalid">Each segment must be at least 1 minute, and the total cannot reach 24 hours</string>
@@ -448,4 +481,12 @@
     <string name="welcome_ready_summary">Check the status below; you can adjust everything later in Settings.</string>
     <string name="settings_replay_welcome">Replay the welcome guide</string>
     <string name="settings_replay_welcome_summary">Reopen the welcome pages and permission guide</string>
+
+    <!-- Device admin (optional keep-alive boost) -->
+    <string name="settings_device_admin">Device admin keep-alive</string>
+    <string name="settings_device_admin_summary">While active the system blocks \"Force stop\" for this app and requires deactivating before uninstall, so plan alarms are less likely to be wiped</string>
+    <string name="device_admin_label">FrostHush keep-alive</string>
+    <string name="device_admin_description">Used only to boost background survival: once active the system no longer allows \"Force stop\" for this app and it must be deactivated before uninstall. No lock-screen, wipe-data or password policies are requested.</string>
+    <string name="device_admin_explanation">FrostHush will become a device admin: the system will no longer allow \"Force stop\" for this app and you must deactivate it before uninstalling, so focus plans are less likely to be interrupted by the system. FrostHush requests no lock-screen, wipe-data or password policies.</string>
+    <string name="device_admin_disable_warning">Deactivating removes the keep-alive ability, so plans may be killed by the system and fire late. Deactivate anyway?</string>
 </resources>

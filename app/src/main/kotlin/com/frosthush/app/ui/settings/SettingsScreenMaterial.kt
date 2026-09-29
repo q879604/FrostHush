@@ -72,6 +72,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import com.frosthush.app.data.SettingsStore
+import com.frosthush.app.focus.DeviceAdmin
 import com.frosthush.app.focus.FocusManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -111,6 +112,23 @@ fun SettingsScreenMaterial(
     var showRestoreConfirm by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    // 设备管理员（增强保活）：开关状态以系统为准，不做本地记忆，
+    // 从系统「激活设备管理员」页返回后重新查询，用户取消激活时开关自动回落。
+    var deviceAdminActive by remember { mutableStateOf(DeviceAdmin.isActive(context)) }
+    // 必须观察 Activity 的生命周期——NavDisplay 的 entry 生命周期恒为 RESUMED，
+    // 从系统页返回前台时不会重发 ON_RESUME，挂在 LocalLifecycleOwner 上不生效。
+    val deviceAdminOwner = remember(context) {
+        var ctx: android.content.Context = context
+        while (ctx is android.content.ContextWrapper && ctx !is androidx.lifecycle.LifecycleOwner) ctx = ctx.baseContext
+        ctx as? androidx.lifecycle.LifecycleOwner
+    }
+    DisposableEffect(deviceAdminOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) deviceAdminActive = DeviceAdmin.isActive(context)
+        }
+        deviceAdminOwner?.lifecycle?.addObserver(observer)
+        onDispose { deviceAdminOwner?.lifecycle?.removeObserver(observer) }
+    }
 
     fun checkSuspended() {
         scope.launch {
@@ -210,6 +228,23 @@ fun SettingsScreenMaterial(
                 trailing = {
                     Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 },
+            )
+
+            // 增强保活：成为设备管理员后系统不允许「强行停止」本应用，卸载前必须先取消激活
+            SettingCard(
+                icon = Icons.Filled.VerifiedUser,
+                title = stringResource(R.string.settings_device_admin),
+                summary = stringResource(R.string.settings_device_admin_summary),
+                onClick = {
+                    if (deviceAdminActive) {
+                        DeviceAdmin.deactivate(context)
+                        deviceAdminActive = DeviceAdmin.isActive(context)
+                    } else {
+                        // 跳系统「激活设备管理员」确认页；返回后由 ON_RESUME 重查真实状态
+                        runCatching { context.startActivity(DeviceAdmin.activationIntent(context)) }
+                    }
+                },
+                trailing = { Switch(checked = deviceAdminActive, onCheckedChange = null) },
             )
 
             SettingCard(

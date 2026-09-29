@@ -30,6 +30,7 @@ object FocusStore {
     private val selectedGroupFile by lazy { File(dir, "selectedGroup.json") }
     private val plansFile by lazy { File(dir, "focusPlans.json") }
     private val planExecutedFile by lazy { File(dir, "planExecuted.json") }
+    private val planAppointmentsFile by lazy { File(dir, "planAppointments.json") }
 
     /** 时长有效范围（分钟） */
     const val MIN_MINUTES = 1
@@ -685,6 +686,7 @@ object FocusStore {
     fun deleteFocusPlan(id: Long) {
         saveFocusPlans(focusPlans().filter { it.id != id })
         clearPlanExecuted(id)
+        clearPlanAppointment(id)
     }
 
     // ---------- 计划已执行日（同一计划同一天只触发一次） ----------
@@ -722,6 +724,44 @@ object FocusStore {
             val json = JSONArray(planExecutedFile.readText())
             val list = (0 until json.length()).map { json.getJSONObject(it) }.filter { it.getLong("id") != planId }
             planExecutedFile.writeText(JSONArray(list).toString())
+        }
+    }
+
+    // ---------- 计划「预约关闭/删除」（当天会执行的计划需先预约） ----------
+    //
+    // 预约时刻落盘而非放内存：1 小时的等待期里应用必然被切到后台甚至被系统回收，
+    // 只存内存会让用户等满 1 小时回来发现"没预约过"。
+
+    /** 计划已存的预约时刻（毫秒）；未预约返回 null */
+    fun planAppointment(planId: Long): Long? = runCatching {
+        if (!planAppointmentsFile.exists()) return null
+        val json = JSONArray(planAppointmentsFile.readText())
+        for (i in 0 until json.length()) {
+            val obj = json.getJSONObject(i)
+            if (obj.getLong("id") == planId) return obj.getLong("at")
+        }
+        null
+    }.getOrNull()
+
+    /** 写入计划预约时刻（同一计划只保留最新一次） */
+    fun setPlanAppointment(planId: Long, at: Long) {
+        dir.mkdirs()
+        val list = runCatching {
+            val json = JSONArray(planAppointmentsFile.readText())
+            (0 until json.length()).map { json.getJSONObject(it) }
+                .filter { it.getLong("id") != planId }.toMutableList()
+        }.getOrDefault(mutableListOf())
+        list.add(JSONObject().put("id", planId).put("at", at))
+        planAppointmentsFile.writeText(JSONArray(list).toString())
+    }
+
+    /** 清除计划预约（操作完成 / 计划被删除时调用，避免遗留可操作窗口） */
+    fun clearPlanAppointment(planId: Long) {
+        runCatching {
+            if (!planAppointmentsFile.exists()) return
+            val json = JSONArray(planAppointmentsFile.readText())
+            val list = (0 until json.length()).map { json.getJSONObject(it) }.filter { it.getLong("id") != planId }
+            planAppointmentsFile.writeText(JSONArray(list).toString())
         }
     }
 

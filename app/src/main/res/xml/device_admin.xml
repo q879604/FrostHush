@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?><!--
+  设备管理员策略清单：故意留空。
+  霜息只需要「成为设备管理员」这一事实本身来增强保活（系统不允许强行停止、卸载前需先取消激活），
+  不申请锁屏、擦除数据、修改密码、监控登录等任何敏感策略。
+-->
+<device-admin xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-policies />
+</device-admin>

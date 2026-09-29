@@ -64,6 +64,7 @@ import com.frosthush.app.R
 import com.frosthush.app.data.FocusStore
 import com.frosthush.app.data.FocusStore.FocusPlan
 import com.frosthush.app.focus.FocusManager
+import com.frosthush.app.focus.PlanCloseGuard
 import com.frosthush.app.focus.PlanScheduler
 import com.frosthush.app.ui.WarningDefaults
 import com.frosthush.app.ui.settings.PlanReliabilityDialog
@@ -117,8 +118,13 @@ fun PlanScreenMiuix(
     var selected by remember { mutableStateOf(setOf<Long>()) }
     // 省电未豁免提醒横幅 + 计划可靠性检查对话框
     var showReliability by remember { mutableStateOf(false) }
-    // 待进入 90 秒冷静期的计划（非空时显示关闭冷静期对话框）
-    var coolDownPlan by remember { mutableStateOf<FocusPlan?>(null) }
+    // 关闭 / 删除计划的守卫：targets 保留最后一次内容（便于对话框播放退场动画），
+    // visible 控制显示，session 每次发起自增以重置倒计时与阶段
+    var guardTargets by remember { mutableStateOf<List<FocusPlan>>(emptyList()) }
+    var guardVisible by remember { mutableStateOf(false) }
+    var guardAction by remember { mutableStateOf(PlanGuardAction.CLOSE) }
+    var guardByAppointment by remember { mutableStateOf(false) }
+    var guardSession by remember { mutableIntStateOf(0) }
     var batteryExempted by remember { mutableStateOf(checkBatteryOptimization(context)) }
 
     // 跳系统设置授权省电豁免后返回：重检使横幅自动消失。
@@ -158,6 +164,44 @@ fun PlanScreenMiuix(
     BackHandler(enabled = selectionMode) {
         selectionMode = false
         selected = emptySet()
+    }
+
+    /**
+     * 发起一次「关闭 / 删除」守卫：先过 [PlanCloseGuard] 的硬闸，再弹对话框过软闸。
+     * - 15 分钟内就要开始 → Toast 拒绝（整批拒绝，避免删掉一半再卡住）；
+     * - 当天会执行的计划 → 先弹预约对话框（预约满 1 小时后有 30 分钟可操作窗口）；
+     * - 其余 → 直接 90 秒冷静期。
+     */
+    fun startGuard(targets: List<FocusPlan>, action: PlanGuardAction) {
+        if (targets.isEmpty()) return
+        val now = System.currentTimeMillis()
+        val verdicts = targets.map {
+            it to PlanCloseGuard.evaluate(
+                plan = it,
+                now = now,
+                executedToday = FocusStore.planExecutedDay(it.id) == FocusStore.todayCode(),
+                appointmentAt = FocusStore.planAppointment(it.id),
+            )
+        }
+        val blocked = verdicts.firstOrNull { it.second.state == PlanCloseGuard.State.BLOCKED_NEAR_START }
+        if (blocked != null) {
+            val minutes = ((blocked.second.remainingMs + 59_999L) / 60_000L).coerceAtLeast(0L)
+            Toast.makeText(
+                context,
+                context.getString(
+                    if (action == PlanGuardAction.DELETE) R.string.plan_delete_blocked
+                    else R.string.plan_close_blocked,
+                    minutes,
+                ),
+                Toast.LENGTH_SHORT,
+            ).show()
+            return
+        }
+        guardTargets = targets
+        guardAction = action
+        guardByAppointment = verdicts.any { it.second.appointmentGate }
+        guardSession++
+        guardVisible = true
     }
 
     val scrollBehavior = MiuixScrollBehavior()
@@ -228,15 +272,9 @@ fun PlanScreenMiuix(
                         onClick = { selected = emptySet() },
                     )
                     IconButton(
-                        onClick = {
-                            selected.forEach { id ->
-                                FocusStore.deleteFocusPlan(id)
-                                PlanScheduler.cancelPlan(context, id)
-                            }
-                            FocusManager.bumpVersion()
-                            selected = emptySet()
-                            selectionMode = false
-                        },
+                        // 长按进入多选后的删除：与「关闭计划」走同一套守卫
+                        // （15 分钟禁删 + 当天预约 + 90 秒冷静期），避免删除成为绕过的口子
+                        onClick = { startGuard(plans.filter { it.id in selected }, PlanGuardAction.DELETE) },
                         enabled = selected.isNotEmpty(),
                     ) {
                         Icon(
@@ -404,20 +442,8 @@ LazyColumn(
                                             PlanScheduler.schedulePlan(context, updated)
                                             FocusManager.bumpVersion()
                                         } else {
-                                            // 关计划的两道闸：① 15 分钟内就要开始 → 禁止关闭；
-                                            // ② 否则先过 90 秒冷静期，倒计时归零才能确认关闭
-                                            val now = System.currentTimeMillis()
-                                            val remainingMs = PlanScheduler.nextStartMillis(plan, now) - now
-                                            if (remainingMs <= PLAN_CLOSE_BLOCK_WINDOW_MS) {
-                                                val minutes = ((remainingMs + 59_999L) / 60_000L).coerceAtLeast(0L)
-                                                Toast.makeText(
-                                                    context,
-                                                    context.getString(R.string.plan_close_blocked, minutes),
-                                                    Toast.LENGTH_SHORT,
-                                                ).show()
-                                            } else {
-                                                coolDownPlan = plan
-                                            }
+                                            // 关计划与删除同一套守卫：15 分钟禁关 + 当天预约 + 90 秒冷静期
+                                            startGuard(listOf(plan), PlanGuardAction.CLOSE)
                                         }
                                     },
                                 )
@@ -438,18 +464,29 @@ LazyColumn(
         batteryExempted = checkBatteryOptimization(context)
     })
 
-    // 关闭计划的 90 秒冷静期（计划不在 15 分钟内开始时才走到这里）
-    PlanCloseCooldownDialog(
-        plan = coolDownPlan,
-        onDismiss = { coolDownPlan = null },
-        onConfirm = {
-            coolDownPlan?.let { target ->
-                val updated = target.copy(enabled = false)
-                FocusStore.updateFocusPlan(updated)
+    // 关闭 / 删除计划的守卫对话框（当天预约闸 + 15 分钟闸 + 90 秒冷静期）
+    PlanGuardDialog(
+        show = guardVisible,
+        session = guardSession,
+        plans = guardTargets,
+        action = guardAction,
+        byAppointment = guardByAppointment,
+        onDismiss = { guardVisible = false },
+        onCommit = { targets ->
+            targets.forEach { target ->
+                if (guardAction == PlanGuardAction.DELETE) {
+                    FocusStore.deleteFocusPlan(target.id)
+                } else {
+                    FocusStore.updateFocusPlan(target.copy(enabled = false))
+                    // 关闭成功后清掉预约，避免遗留一个"可操作窗口"
+                    FocusStore.clearPlanAppointment(target.id)
+                }
                 PlanScheduler.cancelPlan(context, target.id)
-                FocusManager.bumpVersion()
             }
-            coolDownPlan = null
+            guardVisible = false
+            selected = emptySet()
+            selectionMode = false
+            FocusManager.bumpVersion()
         },
     )
 }

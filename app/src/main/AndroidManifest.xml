@@ -81,6 +81,23 @@
             android:name=".focus.FocusActionReceiver"
             android:exported="false"/>
 
+        <!-- 设备管理员（可选，增强保活）：激活后系统不允许对本应用「强行停止」，
+             卸载前必须先在系统设置里取消激活，计划闹钟更不容易被系统清理。
+             策略清单为空（res/xml/device_admin.xml），不申请任何敏感能力。 -->
+        <receiver
+            android:name=".focus.FrostHushDeviceAdminReceiver"
+            android:exported="true"
+            android:label="@string/device_admin_label"
+            android:description="@string/device_admin_description"
+            android:permission="android.permission.BIND_DEVICE_ADMIN">
+            <meta-data
+                android:name="android.app.device_admin"
+                android:resource="@xml/device_admin" />
+            <intent-filter>
+                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+            </intent-filter>
+        </receiver>
+
         <!-- 桌面小部件（原生 AppWidget）：2×2：3 个时长格 + 右下角「设置」
              同一 label 的多个小部件 → HyperOS 侧聚合为同一功能的不同尺寸；
              2×3 可横向拉伸到 2×4（不再单列一个 4 列的入口） -->

@@ -312,6 +312,48 @@
     <string name="plan_close_cooldown_confirm">确认关闭</string>
     <string name="plan_close_cooldown_wait_button">等待中 %1$d s</string>
     <string name="plan_close_blocked">该计划将在 %1$d 分钟后开始，无法关闭</string>
+    <string name="plan_delete_cooldown_title">删除计划前请冷静一下</string>
+    <string name="plan_delete_cooldown_ready">冷静期已结束，现在可以删除该计划。</string>
+    <string name="plan_delete_cooldown_confirm">确认删除</string>
+    <string name="plan_delete_blocked">该计划将在 %1$d 分钟后开始，无法删除</string>
+    <string name="plan_cooldown_targets">目标：%1$s</string>
+    <!-- 当天会执行的计划：关闭/删除前必须先预约（预约满 1 小时 → 30 分钟可操作窗口） -->
+    <string name="plan_appointment_title">当天会执行的计划需先预约</string>
+    <string name="plan_appointment_summary">该计划今天会执行。为避免当天冲动操作，需先预约：预约满 1 小时后，可在 30 分钟内完成关闭或删除；超过 30 分钟需重新预约。</string>
+    <string name="plan_appointment_state_need">待预约</string>
+    <string name="plan_appointment_state_waiting">预约中，%1$s 后可操作</string>
+    <string name="plan_appointment_state_expired">预约已过期，需重新预约</string>
+    <string name="plan_appointment_state_ready">预约已生效，剩余 %1$s</string>
+    <string name="plan_appointment_state_blocked">%1$d 分钟后即将开始，无法操作</string>
+    <string name="plan_appointment_state_direct">可直接操作</string>
+    <string name="plan_appointment_wait_button">等待中 %1$s</string>
+    <string name="plan_appointment_reserve">预约</string>
+    <string name="plan_appointment_reserved">预约成功：1 小时后可操作，30 分钟内有效</string>
+    <string name="plan_appointment_confirm_close">确认关闭</string>
+    <string name="plan_appointment_confirm_delete">确认删除</string>
+    <!-- 冷静期期间滚动展示的励志语录 -->
+    <string-array name="plan_cooldown_quotes">
+        <item>再坚持一下，你比自己想象的更能扛。</item>
+        <item>现在的每一分钟专注，都是将来的底气。</item>
+        <item>别急，先把眼前这一件事做好。</item>
+        <item>慢一点没关系，别停下就好。</item>
+        <item>你不需要很厉害才能开始，但开始了才会很厉害。</item>
+        <item>情绪会过去，习惯会留下。</item>
+        <item>想放弃的时候，正是最难也最有用的时候。</item>
+        <item>今天多撑十分钟，明天就少犹豫一次。</item>
+        <item>真正拉开差距的，是别人松手时你还在握。</item>
+        <item>与其后悔一整天，不如安静做完一件事。</item>
+        <item>一次只做一件事，就已经很快了。</item>
+        <item>你种下的每一分钟，都会在将来发芽。</item>
+        <item>山高路远，先把脚下这步走稳。</item>
+        <item>忍住这一次，你会更信任自己。</item>
+        <item>专注不是天赋，是练出来的肌肉。</item>
+        <item>把想做的事做完，比想清楚更重要。</item>
+        <item>允许自己慢，但不允许自己乱。</item>
+        <item>每一次「再等一下」，都在给未来的自己让路。</item>
+        <item>你不是没有时间，只是还没把它还给重要的事。</item>
+        <item>别让三分钟的情绪，毁掉三小时的努力。</item>
+    </string-array>
     <string name="plan_segments_title">中途休息</string>
     <string name="plan_segments_hint">添加休息段后，结束时间将自动按「开始 + 各段总和」计算</string>
     <string name="plan_segments_invalid">各段时长需 ≥1 分钟，总时长不能达到 24 小时</string>
@@ -446,4 +488,12 @@
     <string name="welcome_ready_summary">确认下方各项状态；之后可随时在设置中调整。</string>
     <string name="settings_replay_welcome">重新查看引导</string>
     <string name="settings_replay_welcome_summary">重新打开欢迎页与权限引导</string>
+
+    <!-- 设备管理员（增强保活，可选） -->
+    <string name="settings_device_admin">设备管理员保活</string>
+    <string name="settings_device_admin_summary">激活后系统会阻止「强行停止」本应用，卸载前也必须先取消激活，计划闹钟更不容易被清理</string>
+    <string name="device_admin_label">霜息保活</string>
+    <string name="device_admin_description">仅用于提升后台存活：激活后系统不允许对本应用「强行停止」，卸载前需先取消激活。不申请锁屏、擦除数据、修改密码等任何敏感策略。</string>
+    <string name="device_admin_explanation">激活后霜息会获得设备管理员身份，系统将不再允许「强行停止」本应用，卸载前也需先取消激活，专注计划到点更不容易被系统清理打断。霜息不会申请锁屏、擦除数据或修改密码等任何敏感权限。</string>
+    <string name="device_admin_disable_warning">取消激活后霜息将失去保活能力，计划可能被系统清理而无法准点触发。确定取消吗？</string>
 </resources>
