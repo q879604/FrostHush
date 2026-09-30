@@ -345,6 +345,18 @@
     <string name="group_guard_confirm_remove">Remove</string>
     <string name="group_guard_confirm_delete">Delete</string>
     <string name="group_guard_note">Adding apps is never restricted; after the 45-minute wait you get a 25-minute window to add or remove apps, or to delete the category (one appointment unlocks every category)</string>
+    <!-- Device admin (keep-alive): deactivating requires its own appointment -->
+    <string name="device_admin_guard_title">Appointment required before turning off keep-alive</string>
+    <string name="device_admin_guard_summary">Device admin is the last safeguard keeping plans on time: while active the system blocks "Force stop" for this app, so turning it off silently disables keep-alive for every plan.</string>
+    <string name="device_admin_guard_state_need">Not booked yet</string>
+    <string name="device_admin_guard_state_waiting">Booked, %1$s to go</string>
+    <string name="device_admin_guard_state_expired">Appointment expired, book again</string>
+    <string name="device_admin_guard_state_ready">Appointment active, %1$s left</string>
+    <string name="device_admin_guard_wait_button">Waiting %1$s</string>
+    <string name="device_admin_guard_reserve">Book</string>
+    <string name="device_admin_guard_reserved">Booked: turn off keep-alive in 1 hour, valid for 20 minutes</string>
+    <string name="device_admin_guard_confirm">Turn off</string>
+    <string name="device_admin_guard_note">After the 1-hour wait you get a 20-minute window to turn it off; this appointment is separate and only unlocks turning off device admin, not plan or category changes</string>
     <string-array name="plan_cooldown_quotes">
         <item>Hold on a little longer — you are tougher than you think.</item>
         <item>Every focused minute now is confidence later.</item>

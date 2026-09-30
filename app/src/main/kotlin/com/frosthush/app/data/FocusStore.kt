@@ -32,6 +32,9 @@ object FocusStore {
     private val planExecutedFile by lazy { File(dir, "planExecuted.json") }
     private val planAppointmentsFile by lazy { File(dir, "planAppointments.json") }
     private val groupAppointmentsFile by lazy { File(dir, "groupAppointments.json") }
+    // 设备管理员「关闭」预约：**单独一份记录**，与计划/分类预约互不相通，
+    // 任意一方的预约生效都不会顺带解锁这里的关闭权限。
+    private val adminAppointmentsFile by lazy { File(dir, "adminAppointment.json") }
 
     /** 时长有效范围（分钟） */
     const val MIN_MINUTES = 1
@@ -793,6 +796,35 @@ object FocusStore {
         runCatching {
             groupAppointmentsFile.writeText(JSONArray().put(JSONObject().put("at", at)).toString())
         }
+    }
+
+    // ---------- 设备管理员「预约关闭」（增强保活需先预约才能关） ----------
+    //
+    // **单独预约**：不复用 planAppointments / groupAppointments 里的任何记录，
+    // 只在 adminAppointment.json 里存一个时刻 —— 预约满 1 小时后只解锁「关闭设备管理员」
+    // 这一项，20 分钟内有效，不会同步解锁计划或分类的修改权限。
+
+    /** 设备管理员关闭预约时刻（毫秒）；未预约返回 null */
+    fun deviceAdminAppointment(): Long? = runCatching {
+        if (!adminAppointmentsFile.exists()) return null
+        val at = JSONObject(adminAppointmentsFile.readText()).optLong("at", 0L)
+        if (at > 0L) at else null
+    }.getOrNull()
+
+    /** 写入设备管理员关闭预约时刻（覆盖旧记录） */
+    fun setDeviceAdminAppointment(at: Long) {
+        dir.mkdirs()
+        runCatching {
+            adminAppointmentsFile.writeText(JSONObject().put("at", at).toString())
+        }
+    }
+
+    /**
+     * 清除设备管理员关闭预约。
+     * 关闭成功后调用，避免遗留一个「可操作窗口」；重新激活时不继承旧预约。
+     */
+    fun clearDeviceAdminAppointment() {
+        runCatching { adminAppointmentsFile.delete() }
     }
 
     /** 当天日期码（yyyyMMdd） */

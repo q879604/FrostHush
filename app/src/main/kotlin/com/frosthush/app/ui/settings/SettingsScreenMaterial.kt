@@ -52,6 +52,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -71,6 +72,7 @@ import com.frosthush.app.R
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.foundation.text.KeyboardOptions
+import com.frosthush.app.data.FocusStore
 import com.frosthush.app.data.SettingsStore
 import com.frosthush.app.focus.DeviceAdmin
 import com.frosthush.app.focus.FocusManager
@@ -115,6 +117,9 @@ fun SettingsScreenMaterial(
     // 设备管理员（增强保活）：开关状态以系统为准，不做本地记忆，
     // 从系统「激活设备管理员」页返回后重新查询，用户取消激活时开关自动回落。
     var deviceAdminActive by remember { mutableStateOf(DeviceAdmin.isActive(context)) }
+    // 关闭设备管理员要先预约（单独预约：只解锁这一项）：对话框可见性 + 每次发起自增的会话号
+    var showAdminGuard by remember { mutableStateOf(false) }
+    var adminGuardSession by remember { mutableIntStateOf(0) }
     // 必须观察 Activity 的生命周期——NavDisplay 的 entry 生命周期恒为 RESUMED，
     // 从系统页返回前台时不会重发 ON_RESUME，挂在 LocalLifecycleOwner 上不生效。
     val deviceAdminOwner = remember(context) {
@@ -237,10 +242,12 @@ fun SettingsScreenMaterial(
                 summary = stringResource(R.string.settings_device_admin_summary),
                 onClick = {
                     if (deviceAdminActive) {
-                        DeviceAdmin.deactivate(context)
-                        deviceAdminActive = DeviceAdmin.isActive(context)
+                        // 关闭要先预约：1 小时等待 → 20 分钟可操作窗口（单独预约，只解锁这一项）
+                        adminGuardSession++
+                        showAdminGuard = true
                     } else {
-                        // 跳系统「激活设备管理员」确认页；返回后由 ON_RESUME 重查真实状态
+                        // 打开不受限：直接跳系统「激活设备管理员」确认页；
+                        // 返回后由 ON_RESUME 重查真实状态
                         runCatching { context.startActivity(DeviceAdmin.activationIntent(context)) }
                     }
                 },
@@ -357,6 +364,21 @@ fun SettingsScreenMaterial(
             },
         )
     }
+
+    // 关闭设备管理员守卫：预约满 1 小时 → 20 分钟窗口内才真正取消激活
+    // （AlertDialog 是独立窗口，不像 miuix 那样依赖 Scaffold 的 popup host）
+    DeviceAdminGuardDialog(
+        show = showAdminGuard,
+        session = adminGuardSession,
+        onDismiss = { showAdminGuard = false },
+        onCommit = {
+            DeviceAdmin.deactivate(context)
+            // 关闭成功即清掉预约，避免遗留一个「可操作窗口」；重新激活时不继承旧预约
+            FocusStore.clearDeviceAdminAppointment()
+            deviceAdminActive = DeviceAdmin.isActive(context)
+            showAdminGuard = false
+        },
+    )
 }
 
 /** 设置条目卡片（internal 供关于页复用，等高 64dp 统一规整） */
