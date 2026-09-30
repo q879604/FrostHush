@@ -72,7 +72,7 @@ internal fun PlanEditAppointmentDialog(
         }
     }
     val appointmentAt = FocusStore.planAppointment(plan.id)
-    val verdict = PlanCloseGuard.evaluateBase(
+    val verdict = PlanCloseGuard.evaluate(
         plan = plan,
         now = now,
         executedToday = FocusStore.planExecutedDay(plan.id) == FocusStore.todayCode(),
@@ -149,19 +149,26 @@ internal fun PlanEditCooldownDialog(
     }
 }
 
-/** 变更原因文案：一行一条（生效时间 / 生效日期 / 暂停对象） */
+/**
+ * 变更原因文案：顿号连接（生效时间 / 生效日期 / 暂停对象 / 关闭计划）。
+ *
+ * 每个原因先各自取一次文案再拼接 —— joinToString 的 transform 参数不是 inline 参数，
+ * 它的 lambda 不是 @Composable 上下文，在里面直接调 stringResource 编译不过。
+ */
 @Composable
 private fun reasonText(reasons: List<PlanEditGuard.Reason>): String =
-    reasons.joinToString("、") { reason ->
-        stringResource(
-            when (reason) {
-                PlanEditGuard.Reason.TIME -> R.string.plan_edit_guard_reason_time
-                PlanEditGuard.Reason.WEEKDAYS -> R.string.plan_edit_guard_reason_weekdays
-                PlanEditGuard.Reason.TARGETS -> R.string.plan_edit_guard_reason_targets
-                PlanEditGuard.Reason.CLOSE -> R.string.plan_edit_guard_reason_close
-            }
-        )
+    reasons.map { reasonLabel(it) }.joinToString("、")
+
+/** 单个变更原因的本地化文案 */
+@Composable
+private fun reasonLabel(reason: PlanEditGuard.Reason): String = stringResource(
+    when (reason) {
+        PlanEditGuard.Reason.TIME -> R.string.plan_edit_guard_reason_time
+        PlanEditGuard.Reason.WEEKDAYS -> R.string.plan_edit_guard_reason_weekdays
+        PlanEditGuard.Reason.TARGETS -> R.string.plan_edit_guard_reason_targets
+        PlanEditGuard.Reason.CLOSE -> R.string.plan_edit_guard_reason_close
     }
+)
 
 /** 预约状态行：待预约 / 预约中倒计时 / 已过期 / 可操作窗口剩余 */
 @Composable

@@ -11,7 +11,7 @@ import com.frosthush.app.data.FocusStore.FocusPlan
  * 因此共用 [PlanCloseGuard] 那套闸门：预约满 1 小时 → 30 分钟可操作窗口 → 超窗重新预约；
  * 非当天但 15 分钟内就要开始 → 直接禁止。
  *
- * 只有「真正动到这些字段」才设闸：只改名字、只改分段（时长结构）不受影响。
+ * 只有「真正动到这些字段」才设闸：只改名字不受影响。
  * 非当天的计划改这些字段同样要过闸（走 90 秒冷静期），与列表里关闭计划的行为一致。
  */
 object PlanEditGuard {
@@ -41,6 +41,13 @@ object PlanEditGuard {
 
         /** 全部被守卫的计划都已放行（预约窗口内） */
         val allowed: Boolean get() = !guarded || guarders.all { verdicts[it.id]?.allowed == true }
+
+        /**
+         * 「15 分钟内就要开始」的剩余毫秒（该状态下直接拒绝，连预约都不给）；没有则 null。
+         * UI 用它弹 Toast 提示还剩几分钟，与列表里关闭计划的行为一致。
+         */
+        val blockedRemainingMs: Long?
+            get() = verdicts.values.firstOrNull { it.state == PlanCloseGuard.State.BLOCKED_NEAR_START }?.remainingMs
     }
 
     /**
@@ -48,9 +55,11 @@ object PlanEditGuard {
      */
     fun reasonsFor(old: FocusPlan, new: FocusPlan): List<Reason> = buildList {
         // 分段结构也算「生效时间」：分段顺序/时长直接决定当天何时暂停哪些应用
-        if (old.startMinute != new.startMinute || old.endMinute != new.endMinute ||
-            (old.segments ?: emptyList()) != (new.segments ?: emptyList())
-        ) {
+        // 注意用 orEmpty() 而不是 `?: emptyList()`：布尔表达式里没有期望类型，
+        // emptyList() 的泛型 T 推断不出来（CI 编译器直接报 Cannot infer type for T）
+        val oldSegments = old.segments.orEmpty()
+        val newSegments = new.segments.orEmpty()
+        if (old.startMinute != new.startMinute || old.endMinute != new.endMinute || oldSegments != newSegments) {
             add(Reason.TIME)
         }
         if (old.weekdays != new.weekdays) add(Reason.WEEKDAYS)
@@ -62,7 +71,8 @@ object PlanEditGuard {
     /**
      * 判定这次编辑要过哪道闸。判定对象是**编辑前**的计划（现在会执行的那一个）。
      *
-     * 与关闭 / 删除计划完全一致：
+     * 判定直接委托 [PlanCloseGuard.evaluate]，与关闭 / 删除计划是同一把尺子：
+     * - 计划已停用 → 不执行，不设闸（只需冷静期）；
      * - 改之前「今天会执行」→ 必须先预约（1 小时等待 + 30 分钟窗口）；
      * - 非当天但 15 分钟内就要开始 → 直接禁止（[PlanCloseGuard.State.BLOCKED_NEAR_START]）；
      * - 其余 → [PlanCloseGuard.State.ALLOWED]，由 UI 接着走 90 秒冷静期。
@@ -84,18 +94,22 @@ object PlanEditGuard {
         if (old == null) return Verdict(emptyList(), emptyList(), emptyMap())
         val reasons = reasonsFor(old, new)
         if (reasons.isEmpty()) return Verdict(emptyList(), emptyList(), emptyMap())
-        // 用 evaluateBase 而不是 evaluate：计划停用时 evaluate 会直接放行，而
-        // 「把当天已停用的计划改到稍后时段」改完它就会真的执行，不能放行
-        val verdict = PlanCloseGuard.evaluateBase(old, now, executedToday, appointmentAt)
+        // 与列表里关闭计划同一个函数、同一套语义：已停用的计划本来就不会执行，
+        // 改它的时间不产生任何当天影响 → 只需冷静期，不用预约
+        val verdict = PlanCloseGuard.evaluate(old, now, executedToday, appointmentAt)
         return Verdict(reasons, listOf(old), mapOf(old.id to verdict))
     }
 
-    /** 暂停对象指纹：绑定的应用集 id（新的多集优先，回落旧的单集字段）+ 直选应用 */
+    /**
+     * 暂停对象指纹：绑定的应用集 id（新的多集优先，回落旧的单集字段）+ 直选应用。
+     *
+     * 显式写出局部变量类型：`?: emptyList()` 没有期望类型时泛型 T 推断不出来会编译失败。
+     */
     private fun targetsOf(plan: FocusPlan): List<String> {
-        val groups = plan.appGroupIds?.map { "g$it" }
+        val groups: List<String> = plan.appGroupIds?.map { "g$it" }
             ?: plan.appGroupId?.let { listOf("g$it") }
             ?: emptyList()
-        val direct = plan.directEntries?.sorted() ?: emptyList()
+        val direct: List<String> = plan.directEntries?.sorted() ?: emptyList()
         return groups + direct
     }
 }

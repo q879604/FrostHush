@@ -59,8 +59,9 @@ object PlanCloseGuard {
 
     /**
      * 判定一次关闭 / 删除是否放行。
-     * 「已停用的计划不再触发，不需要闸门」这条特例只对关闭/删除成立（见 [evaluateBase] 注释），
-     * 编辑计划时必须用 [evaluateBase]，否则把「改完还是停用」也一起放行了。
+     *
+     * 编辑计划的「生效时间 / 生效日期 / 暂停对象」也复用这条判定（见 PlanEditGuard），
+     * 保证改计划与关计划是同一道闸、同一套语义。
      *
      * @param now 当前时刻
      * @param executedToday 该计划今天是否已经执行过（FocusStore.planExecutedDay == todayCode）
@@ -74,24 +75,7 @@ object PlanCloseGuard {
     ): Verdict {
         // 已停用的计划不会再触发，不需要守卫（删除仍会走冷静期）
         if (!plan.enabled) return Verdict(State.ALLOWED)
-        return evaluateBase(plan, now, executedToday, appointmentAt)
-    }
 
-    /**
-     * 基础闸（关闭 / 删除 / 改生效时间 / 改生效日期 / 改暂停对象共用）：
-     * 1. 当天会执行 → 必须先预约（预约满 1 小时 → 30 分钟窗口 → 超窗重预约）；
-     * 2. 非当天但 [BLOCK_WINDOW_MS] 内就要开始 → 直接禁止；
-     * 3. 其余放行。
-     *
-     * **与 [evaluate] 的唯一区别**：不因 `enabled == false` 提前放行。编辑计划时必须走这条 ——
-     * 把一个「当天已停用」的计划改到当天稍后时段，改完它就会真的执行，所以仍然要过闸。
-     */
-    fun evaluateBase(
-        plan: FocusPlan,
-        now: Long,
-        executedToday: Boolean,
-        appointmentAt: Long?,
-    ): Verdict {
         if (occursToday(plan, now, executedToday)) {
             // 当天会执行：预约是唯一入口
             if (appointmentAt == null || appointmentAt > now) return Verdict(State.NEED_APPOINTMENT)

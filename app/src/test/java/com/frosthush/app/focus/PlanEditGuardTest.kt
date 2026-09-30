@@ -9,10 +9,10 @@ import java.util.Calendar
 
 /**
  * PlanEditGuard 回归测试（改生效时间 / 生效日期 / 暂停对象要和关闭计划一样过闸）：
- * - 只有动到受保护字段才设闸（只改名字、只改分段不设闸）；
- * - 只有「改之前今天会执行」的计划才设闸；
+ * - 只有动到受保护字段（含分段结构、启用改停用）才设闸，只改名字不设闸；
+ * - 动到受保护字段就一定要过闸（非当天的改动也走 90 秒冷静期，与列表里关计划一致）；
  * - 当天会执行 → 预约闸（1 小时等待 + 30 分钟窗口）；非当天但 15 分钟内开始 → 直接禁止；
- * - 已停用的计划**也要**过闸（改完就会执行）。
+ * - 已停用的计划改时间只需冷静期、不用预约（与关闭计划同口径）。
  *
  * 2026-09-16 是周三。
  */
@@ -141,11 +141,13 @@ class PlanEditGuardTest {
     }
 
     @Test
-    fun `已停用的当天计划改时间也要过闸`() {
+    fun `已停用的计划改时间要过闸但不用预约（与关闭计划同口径）`() {
+        // 停用的计划本来就不执行，改它的时间不影响当天 → 只需冷静期
         val old = plan(enabled = false)
         val v = evaluate(old, old.copy(startMinute = 20 * 60, endMinute = 21 * 60, enabled = false))
         assertTrue(v.guarded)
-        assertEquals(PlanCloseGuard.State.NEED_APPOINTMENT, v.verdicts[old.id]?.state)
+        assertTrue(v.allowed)
+        assertEquals(PlanCloseGuard.State.ALLOWED, v.verdicts[old.id]?.state)
     }
 
     @Test

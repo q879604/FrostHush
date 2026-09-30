@@ -188,6 +188,17 @@ fun PlanEditScreenMaterial(plan: FocusPlan?, onBack: () -> Unit) {
             executedToday = plan != null && FocusStore.planExecutedDay(plan.id) == FocusStore.todayCode(),
             appointmentAt = plan?.let { FocusStore.planAppointment(it.id) },
         )
+        // 15 分钟内就要开始：和关闭计划一样直接拒绝，连预约都不给（改完马上就要执行，来不及反悔）
+        val blockedMs = verdict.blockedRemainingMs
+        if (blockedMs != null) {
+            val minutes = ((blockedMs + 59_999L) / 60_000L).coerceAtLeast(1L)
+            Toast.makeText(
+                context,
+                context.getString(R.string.plan_edit_guard_state_blocked, minutes),
+                Toast.LENGTH_SHORT,
+            ).show()
+            return
+        }
         // guarded = 动到了受保护字段（改生效时间/日期/暂停对象，或把计划改成停用）：
         // allowed 时直接进 90 秒冷静期，否则先进预约对话框（与列表里关闭计划完全一致）
         if (verdict.guarded) {
