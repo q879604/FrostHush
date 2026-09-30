@@ -45,6 +45,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -59,6 +60,7 @@ import com.frosthush.app.data.FocusStore
 import com.frosthush.app.data.FocusStore.FocusPlan
 import com.frosthush.app.data.SettingsStore
 import com.frosthush.app.focus.FocusManager
+import com.frosthush.app.focus.PlanEditGuard
 import com.frosthush.app.focus.PlanScheduler
 import com.frosthush.app.ui.DEFAULT_FOCUS_MINUTES
 import com.frosthush.app.ui.MAX_SEGMENTS
@@ -122,6 +124,14 @@ fun PlanEditScreenMaterial(plan: FocusPlan?, onBack: () -> Unit) {
     var showLongDurationConfirm by remember { mutableStateOf(false) }
     val groups = remember { FocusStore.appGroups() }
 
+    // 编辑守卫：改「生效时间 / 生效日期 / 暂停对象」且该计划今天会执行 → 先预约，再过冷静期
+    var editGuardStage by remember { mutableStateOf(0) }   // 0=无 1=预约 2=冷静期
+    var editGuardSession by remember { mutableIntStateOf(0) }
+    var editGuardReasons by remember { mutableStateOf(emptyList<PlanEditGuard.Reason>()) }
+    // 过闸后待落盘的改动（冷静期点确认才真正保存）
+    var pendingUpdate by remember { mutableStateOf<FocusPlan?>(null) }
+
+
     // 分段模式：结束时间只读推导值；显示用
     val segTotal = segments.sumOf { it.minutes }
     val displayEnd = if (segments.isNotEmpty()) (startMinute + segTotal) % 1440 else endMinute
@@ -138,6 +148,18 @@ fun PlanEditScreenMaterial(plan: FocusPlan?, onBack: () -> Unit) {
 
     // 编辑页内系统返回键：退回计划列表（应用选择页内的返回由 AppSelectScreen 自身拦截）
     BackHandler { onBack() }
+
+    /** 真正落盘：写库 + 重置当天已执行标记 + 重排闹钟 + 返回 */
+    fun commitUpdate(updated: FocusPlan) {
+        if (plan == null) FocusStore.addFocusPlan(updated)
+        else FocusStore.updateFocusPlan(updated)
+        // 编辑后重置当天已执行标记，允许当天重新触发
+        FocusStore.clearPlanExecuted(updated.id)
+        if (updated.enabled) PlanScheduler.schedulePlan(context, updated)
+        else PlanScheduler.cancelPlan(context, updated.id)
+        FocusManager.bumpVersion()
+        onBack()
+    }
 
     fun doSave() {
         // 尾部休息段修剪：分段必须以专注结束（专注段结束即会话结束），末尾追加的休息段无意义
@@ -157,14 +179,26 @@ fun PlanEditScreenMaterial(plan: FocusPlan?, onBack: () -> Unit) {
             enabled = enabled,
             segments = segs,
         )
-        if (plan == null) FocusStore.addFocusPlan(updated)
-        else FocusStore.updateFocusPlan(updated)
-        // 编辑后重置当天已执行标记，允许当天重新触发
-        FocusStore.clearPlanExecuted(updated.id)
-        if (updated.enabled) PlanScheduler.schedulePlan(context, updated)
-        else PlanScheduler.cancelPlan(context, updated.id)
-        FocusManager.bumpVersion()
-        onBack()
+        // 改生效时间 / 生效日期 / 暂停对象，且该计划今天会执行 → 与关闭计划同一套闸：
+        // 当天未预约 → 先预约（1 小时等待 + 30 分钟窗口）→ 再过 90 秒冷静期
+        val verdict = PlanEditGuard.evaluate(
+            old = plan,
+            new = updated,
+            now = System.currentTimeMillis(),
+            executedToday = plan != null && FocusStore.planExecutedDay(plan.id) == FocusStore.todayCode(),
+            appointmentAt = plan?.let { FocusStore.planAppointment(it.id) },
+        )
+        // guarded = 动到了受保护字段（改生效时间/日期/暂停对象，或把计划改成停用）：
+        // allowed 时直接进 90 秒冷静期，否则先进预约对话框（与列表里关闭计划完全一致）
+        if (verdict.guarded) {
+            editGuardReasons = verdict.reasons
+            pendingUpdate = updated
+            editGuardSession++
+            // allowed（没被预约闸拦住）→ 直接进冷静期；否则先进预约对话框
+            editGuardStage = if (verdict.allowed) 2 else 1
+            return
+        }
+        commitUpdate(updated)
     }
 
     /** 当前表单的单次专注时长（分钟），不受 240 分钟限制 */
@@ -601,6 +635,32 @@ fun PlanEditScreenMaterial(plan: FocusPlan?, onBack: () -> Unit) {
             },
         )
     }
+
+    // 预约 / 冷静期对话框：关闭计划走的是 PlanGuardDialog，这里复用同一套交互。
+    // ⚠ 必须放在 Scaffold 内容里：miuix 的 OverlayDialog 依赖 Scaffold 提供的 popup host，
+    // 放在 Scaffold 外会**静默不显示**（点保存好像没反应）。
+    PlanEditAppointmentDialog(
+        show = editGuardStage == 1,
+        session = editGuardSession,
+        plan = plan,
+        reasons = editGuardReasons,
+        onDismiss = { editGuardStage = 0 },
+        onReserved = { at -> plan?.let { FocusStore.setPlanAppointment(it.id, at) } },
+        onReady = { editGuardStage = 2 },
+    )
+    PlanEditCooldownDialog(
+        show = editGuardStage == 2,
+        session = editGuardSession,
+        plan = plan,
+        reasons = editGuardReasons,
+        onDismiss = { editGuardStage = 0 },
+        onConfirm = {
+            editGuardStage = 0
+            val updated = pendingUpdate
+            pendingUpdate = null
+            if (updated != null) commitUpdate(updated)
+        },
+    )
 }
 
 private fun timeTextEditMaterial(minute: Int): String = "%02d:%02d".format(minute / 60, minute % 60)
