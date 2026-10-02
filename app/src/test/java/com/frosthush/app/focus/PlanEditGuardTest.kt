@@ -12,7 +12,9 @@ import java.util.Calendar
  * - 只有动到受保护字段（含分段结构、启用改停用）才设闸，只改名字不设闸；
  * - 动到受保护字段就一定要过闸（非当天的改动也走 90 秒冷静期，与列表里关计划一致）；
  * - 当天会执行 → 预约闸（1 小时等待 + 30 分钟窗口）；非当天但 15 分钟内开始 → 直接禁止；
- * - 已停用的计划改时间只需冷静期、不用预约（与关闭计划同口径）。
+ * - 已停用的计划改时间只需冷静期、不用预约（与关闭计划同口径），
+ *   但「改完之后今天会执行」（挪到今天 / 停用改到今天并启用）同样要过预约闸；
+ * - 预约记录与关闭计划共用同一份：关闭用的预约，编辑守卫读到的是同一个值。
  *
  * 2026-09-16 是周三。
  */
@@ -155,6 +157,78 @@ class PlanEditGuardTest {
         val old = plan(weekdays = emptySet())
         val v = evaluate(old, old.copy(startMinute = 20 * 60, endMinute = 21 * 60), executedToday = true)
         assertTrue(v.guarded)
+    }
+
+    // ---------- 改完之后才落到今天：同样要预约 ----------
+
+    @Test
+    fun `改完之后今天才执行要预约（把计划挪到今天）`() {
+        // 周三 9:00：只在周四执行的计划，改成周三执行 → 改完今天就会执行
+        val old = plan(weekdays = setOf(4))
+        val v = evaluate(old, old.copy(weekdays = setOf(3)))
+        assertTrue(v.guarded)
+        assertEquals(PlanCloseGuard.State.NEED_APPOINTMENT, v.verdicts[old.id]?.state)
+        assertFalse(v.allowed)
+    }
+
+    @Test
+    fun `把已过时的一次性计划改到稍后今天要预约`() {
+        // 周三 9:00：不重复计划的 07:00 时段已经过去（今天不会再执行），
+        // 改到 20:00 之后今天就会执行 → 同样要预约
+        val old = plan(weekdays = emptySet(), startMinute = 7 * 60, endMinute = 8 * 60)
+        val v = evaluate(old, old.copy(startMinute = 20 * 60, endMinute = 21 * 60))
+        assertTrue(v.guarded)
+        assertEquals(PlanCloseGuard.State.NEED_APPOINTMENT, v.verdicts[old.id]?.state)
+        assertFalse(v.allowed)
+    }
+
+    @Test
+    fun `停用的计划改到今天并启用要预约`() {
+        val old = plan(weekdays = setOf(4), enabled = false)
+        val v = evaluate(old, old.copy(weekdays = setOf(3), enabled = true))
+        assertTrue(v.guarded)
+        assertEquals(PlanCloseGuard.State.NEED_APPOINTMENT, v.verdicts[old.id]?.state)
+    }
+
+    @Test
+    fun `改完之后仍在今天之外只需冷静期`() {
+        val old = plan(weekdays = setOf(4, 5))
+        val v = evaluate(old, old.copy(weekdays = setOf(4, 5, 6), appGroupIds = listOf(9L)))
+        assertTrue(v.guarded)
+        assertTrue(v.allowed)
+        assertEquals(PlanCloseGuard.State.ALLOWED, v.verdicts[old.id]?.state)
+    }
+
+    @Test
+    fun `改完之后今天执行时同样吃同一份预约`() {
+        // 「关闭计划」预约满 1 小时后写入的时刻，编辑守卫读到同一个值 → 挪到今天也放行
+        val old = plan(weekdays = setOf(4))
+        val at = wednesday - 61 * 60_000L
+        val v = evaluate(old, old.copy(weekdays = setOf(3)), appointmentAt = at)
+        assertTrue(v.allowed)
+        assertTrue(PlanCloseGuard.windowLeftMillis(at, wednesday) > 0)
+    }
+
+    // ---------- 与「关闭计划」共用同一份预约 ----------
+
+    @Test
+    fun `关闭用的预约也解锁修改（共用同一份预约）`() {
+        // 周三 9:00：预约写在 10 分钟前 → 还在 1 小时等待期，关闭与修改都不放行
+        val old = plan()
+        val recent = wednesday - 10 * 60_000L
+        val v = evaluate(old, old.copy(startMinute = 20 * 60, endMinute = 21 * 60), appointmentAt = recent)
+        assertFalse(v.allowed)
+        assertEquals(PlanCloseGuard.State.APPOINTMENT_WAITING, v.verdicts[old.id]?.state)
+
+        // 同一份预约满 1 小时后：关闭与修改同一口径，都放行，且共享同一个窗口剩余时间
+        val matured = wednesday - 61 * 60_000L
+        val v2 = evaluate(old, old.copy(startMinute = 20 * 60, endMinute = 21 * 60), appointmentAt = matured)
+        assertTrue(v2.allowed)
+        assertTrue(PlanCloseGuard.windowLeftMillis(matured, wednesday) > 0)
+        assertEquals(
+            PlanCloseGuard.evaluate(old, wednesday, executedToday = false, appointmentAt = matured).state,
+            v2.verdicts[old.id]?.state,
+        )
     }
 
     // ---------- 预约状态 ----------

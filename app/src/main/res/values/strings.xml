@@ -516,7 +516,7 @@
     <string name="device_admin_disable_warning">Deactivating removes the keep-alive ability, so plans may be killed by the system and fire late. Deactivate anyway?</string>
     <!-- Guard for editing a plan's effective time / weekdays / paused targets (same gates as close & delete) -->
     <string name="plan_edit_guard_title">Appointment required to change these</string>
-    <string name="plan_edit_guard_summary">Plan &quot;%1$s&quot; runs today and this save changes: %2$s. To avoid impulsive same-day edits, book first: after the 1-hour wait you have 30 minutes to save the change; past that, book again.</string>
+    <string name="plan_edit_guard_summary">Plan &quot;%1$s&quot; runs today once this change is saved and this save changes: %2$s. To avoid impulsive same-day edits, book first - the same booking also unlocks closing this plan: after the 1-hour wait you have 30 minutes to save the change; past that, book again.</string>
     <string name="plan_edit_guard_reason_time">effective time</string>
     <string name="plan_edit_guard_reason_weekdays">effective days</string>
     <string name="plan_edit_guard_reason_targets">paused targets (app groups / apps)</string>
@@ -530,7 +530,7 @@
     <string name="plan_edit_guard_blocked_button">Starts soon, cannot change</string>
     <string name="plan_edit_guard_reserved">Booked: editable in 1 hour, valid for 30 minutes</string>
     <string name="plan_edit_guard_confirm">Save change</string>
-    <string name="plan_edit_guard_note">Renaming is never restricted; once allowed, the change is saved right away</string>
+    <string name="plan_edit_guard_note">Renaming is never restricted; once the booking is active you can both close this plan and change the items above within 30 minutes</string>
     <string name="plan_edit_guard_cooldown_title">Take a breath before editing</string>
     <string name="plan_edit_guard_cooldown_ready">Cooldown finished, you can save this change now.</string>
     <string name="plan_edit_guard_cooldown_target">Plan &quot;%1$s&quot; will change: %2$s</string>

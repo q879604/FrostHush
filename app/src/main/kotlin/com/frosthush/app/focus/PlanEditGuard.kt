@@ -8,11 +8,15 @@ import com.frosthush.app.data.FocusStore.FocusPlan
  * 修改「当天会执行的计划」的**生效时间 / 生效日期 / 暂停对象**（应用集或直选应用），
  * 以及从编辑页把计划**改成效停用**（等价于列表里的关闭计划），
  * 效果等同于把它今天的实际专注对象和时间挪走 —— 和关闭、删除一样是绕过口子，
- * 因此共用 [PlanCloseGuard] 那套闸门：预约满 1 小时 → 30 分钟可操作窗口 → 超窗重新预约；
- * 非当天但 15 分钟内就要开始 → 直接禁止。
+ * 因此共用 [PlanCloseGuard] 那套闸门（**同一份预约记录**）：预约满 1 小时 → 30 分钟可操作窗口 →
+ * 超窗重新预约；非当天但 15 分钟内就要开始 → 直接禁止。
  *
  * 只有「真正动到这些字段」才设闸：只改名字不受影响。
  * 非当天的计划改这些字段同样要过闸（走 90 秒冷静期），与列表里关闭计划的行为一致。
+ *
+ * 「改完之后今天会执行」也算：把计划挪到今天、或把已停用的计划改到今天并启用，
+ * 改完就今天执行，同样是在动今天的专注安排，必须过同一道闸
+ * （否则「先改到明天、再改回今天」就是一条绕过口子）。
  */
 object PlanEditGuard {
 
@@ -69,12 +73,14 @@ object PlanEditGuard {
     }
 
     /**
-     * 判定这次编辑要过哪道闸。判定对象是**编辑前**的计划（现在会执行的那一个）。
+     * 判定这次编辑要过哪道闸。
      *
-     * 判定直接委托 [PlanCloseGuard.evaluate]，与关闭 / 删除计划是同一把尺子：
-     * - 计划已停用 → 不执行，不设闸（只需冷静期）；
-     * - 改之前「今天会执行」→ 必须先预约（1 小时等待 + 30 分钟窗口）；
-     * - 非当天但 15 分钟内就要开始 → 直接禁止（[PlanCloseGuard.State.BLOCKED_NEAR_START]）；
+     * 判定委托 [PlanCloseGuard.evaluate]，与关闭 / 删除计划是同一把尺子、同一份预约记录：
+     * - 已停用、且改完仍不在今天执行 → 不执行，不设预约闸（只需冷静期）；
+     * - **改之前**「今天会执行」→ 必须先预约（1 小时等待 + 30 分钟窗口）；
+     * - 改之前不执行、**改完之后今天会执行**（挪到今天 / 停用改到今天并启用）→ 同样必须先预约：
+     *   改完就今天执行，一样是在动今天的专注安排，不能成为绕过口子；
+     * - 两者都不在当天、但 15 分钟内就要开始 → 直接禁止（[PlanCloseGuard.State.BLOCKED_NEAR_START]）；
      * - 其余 → [PlanCloseGuard.State.ALLOWED]，由 UI 接着走 90 秒冷静期。
      *
      * 只要动到受保护字段就一定 [guarded]（非当天的改动同样要冷静期，和列表里关计划一样）。
@@ -82,7 +88,8 @@ object PlanEditGuard {
      * @param old 已保存的计划；新建计划传 null（新建不是「改今天的计划」，不设闸）
      * @param now 当前时刻
      * @param executedToday 该计划今天是否已经执行过
-     * @param appointmentAt 该计划已存的预约时刻；未预约传 null
+     * @param appointmentAt 该计划已存的预约时刻；未预约传 null。与「关闭计划」是同一份记录
+     *   （`FocusStore.planAppointment` / `setPlanAppointment`），预约一次既能关闭、也能改这几项
      */
     fun evaluate(
         old: FocusPlan?,
@@ -94,9 +101,19 @@ object PlanEditGuard {
         if (old == null) return Verdict(emptyList(), emptyList(), emptyMap())
         val reasons = reasonsFor(old, new)
         if (reasons.isEmpty()) return Verdict(emptyList(), emptyList(), emptyMap())
-        // 与列表里关闭计划同一个函数、同一套语义：已停用的计划本来就不会执行，
-        // 改它的时间不产生任何当天影响 → 只需冷静期，不用预约
-        val verdict = PlanCloseGuard.evaluate(old, now, executedToday, appointmentAt)
+        // 判定基准：优先「改之前今天会执行」的那份计划；否则看「改完之后今天会执行」的那份。
+        // 后者覆盖「把计划挪到今天」「把停用的计划改到今天并启用」——改完就今天执行，
+        // 同样要过预约闸，否则「先改到明天、再改回今天」就是一条绕过口子。
+        val oldRunsToday = old.enabled && PlanCloseGuard.occursToday(old, now, executedToday)
+        val newRunsToday = !oldRunsToday && new.enabled && PlanCloseGuard.occursToday(new, now, false)
+        val verdict = if (newRunsToday) {
+            // 改完才落到今天：按「改完之后」的计划过闸（今天显然还没执行过）
+            PlanCloseGuard.evaluate(new, now, executedToday = false, appointmentAt = appointmentAt)
+        } else {
+            // 与列表里关闭计划同一个函数、同一套语义：已停用的计划本来就不会执行，
+            // 改它的时间不产生任何当天影响 → 只需冷静期，不用预约
+            PlanCloseGuard.evaluate(old, now, executedToday, appointmentAt)
+        }
         return Verdict(reasons, listOf(old), mapOf(old.id to verdict))
     }
 
