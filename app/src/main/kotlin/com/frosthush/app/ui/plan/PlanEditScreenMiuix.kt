@@ -178,14 +178,19 @@ fun PlanEditScreenMiuix(plan: FocusPlan?, onBack: () -> Unit) {
             enabled = enabled,
             segments = segs,
         )
-        // 改生效时间 / 生效日期 / 暂停对象，且该计划今天会执行 → 与关闭计划同一套闸：
-        // 当天未预约 → 先预约（1 小时等待 + 30 分钟窗口）→ 再过 90 秒冷静期
+        // 改生效时间 / 生效日期 / **减少**暂停对象，且该计划今天会执行 → 与关闭计划同一套闸：
+        // 当天未预约 → 先预约（1 小时等待 + 30 分钟窗口）→ 再过 90 秒冷静期。
+        // 只是「增加」暂停对象（多选应用集、追加直选应用）不算改动，直接放行。
         val verdict = PlanEditGuard.evaluate(
             old = plan,
             new = updated,
             now = System.currentTimeMillis(),
             executedToday = plan != null && FocusStore.planExecutedDay(plan.id) == FocusStore.todayCode(),
             appointmentAt = plan?.let { FocusStore.planAppointment(it.id) },
+            // 没绑定任何对象时运行时用的是默认集：传进去才能分清「纯增加」和「换掉对象」
+            fallbackGroupId = FocusStore.defaultGroup()?.id,
+            // 按条目比较：把直选应用换成包含它们的应用集依然算纯增加（真正暂停的应用没少）
+            groupEntries = { id -> groups.firstOrNull { it.id == id }?.entries ?: emptyList<String>() },
         )
         // 15 分钟内就要开始：和关闭计划一样直接拒绝，连预约都不给（改完马上就要执行，来不及反悔）
         val blockedMs = verdict.blockedRemainingMs

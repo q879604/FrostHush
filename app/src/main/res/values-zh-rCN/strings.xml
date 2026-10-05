@@ -319,10 +319,10 @@
     <string name="plan_cooldown_targets">目标：%1$s</string>
     <!-- 修改计划「生效时间 / 生效日期 / 暂停对象」的守卫（与关闭/删除计划共用预约 + 冷静期） -->
     <string name="plan_edit_guard_title">当天会执行的计划，改这几项需先预约</string>
-    <string name="plan_edit_guard_summary">计划「%1$s」改完就会在今天执行，本次要改：%2$s。为避免当天冲动改动，需先预约（与「关闭计划」共用同一份预约）：预约满 1 小时后，可在 30 分钟内完成修改；超过 30 分钟需重新预约。</string>
+    <string name="plan_edit_guard_summary">计划「%1$s」改完就会在今天执行，本次要改：%2$s（只增加应用集或应用不受限制）。为避免当天冲动改动，需先预约（与「关闭计划」共用同一份预约）：预约满 1 小时后，可在 30 分钟内完成修改；超过 30 分钟需重新预约。</string>
     <string name="plan_edit_guard_reason_time">生效时间</string>
     <string name="plan_edit_guard_reason_weekdays">生效日期</string>
-    <string name="plan_edit_guard_reason_targets">暂停对象（应用集 / 应用）</string>
+    <string name="plan_edit_guard_reason_targets">减少或换掉暂停对象（应用集 / 应用）</string>
     <string name="plan_edit_guard_reason_close">关闭计划</string>
     <string name="plan_edit_guard_state_need">待预约</string>
     <string name="plan_edit_guard_state_waiting">预约中，%1$s 后可修改</string>
@@ -333,7 +333,7 @@
     <string name="plan_edit_guard_blocked_button">即将开始，无法修改</string>
     <string name="plan_edit_guard_reserved">预约成功：1 小时后可修改，30 分钟内有效</string>
     <string name="plan_edit_guard_confirm">确认修改</string>
-    <string name="plan_edit_guard_note">只改名字不受限制；预约生效后 30 分钟内，既能关闭这个计划，也能修改以上几项</string>
+    <string name="plan_edit_guard_note">只改名字、以及增加应用集或应用都不受限制；预约生效后 30 分钟内，既能关闭这个计划，也能修改以上几项</string>
     <string name="plan_edit_guard_cooldown_title">修改计划前请冷静一下</string>
     <string name="plan_edit_guard_cooldown_ready">冷静期已结束，现在可以保存这次修改。</string>
     <string name="plan_edit_guard_cooldown_target">计划「%1$s」本次要改：%2$s</string>

@@ -14,7 +14,9 @@ import java.util.Calendar
  * - 当天会执行 → 预约闸（1 小时等待 + 30 分钟窗口）；非当天但 15 分钟内开始 → 直接禁止；
  * - 已停用的计划改时间只需冷静期、不用预约（与关闭计划同口径），
  *   但「改完之后今天会执行」（挪到今天 / 停用改到今天并启用）同样要过预约闸；
- * - 预约记录与关闭计划共用同一份：关闭用的预约，编辑守卫读到的是同一个值。
+ * - 预约记录与关闭计划共用同一份：关闭用的预约，编辑守卫读到的是同一个值；
+ * - **增加一律不受限制**：多选应用集、追加直选应用、把直选换成包含它们的应用集都不设闸，
+ *   只有「改完之后有应用不再被暂停」才设闸。
  *
  * 2026-09-16 是周三。
  */
@@ -70,7 +72,7 @@ class PlanEditGuardTest {
     }
 
     @Test
-    fun `改绑定的应用集要设闸`() {
+    fun `换掉绑定的应用集要设闸`() {
         val old = plan()
         val v = evaluate(old, old.copy(appGroupIds = listOf(8L)))
         assertTrue(v.guarded)
@@ -78,17 +80,137 @@ class PlanEditGuardTest {
     }
 
     @Test
-    fun `改直选应用要设闸`() {
-        val old = plan(groupIds = null, directEntries = listOf("com.a"))
-        val v = evaluate(old, old.copy(directEntries = listOf("com.a", "com.b")))
+    fun `移除直选应用要设闸`() {
+        val old = plan(groupIds = null, directEntries = listOf("com.a", "com.b"))
+        val v = evaluate(old, old.copy(directEntries = listOf("com.a")))
         assertTrue(v.guarded)
         assertEquals(listOf(PlanEditGuard.Reason.TARGETS), v.reasons)
+    }
+
+    // ---------- 增加一律不受限制（多选应用集 / 追加应用） ----------
+
+    @Test
+    fun `多选应用集（纯增加）不设闸`() {
+        val old = plan(groupIds = listOf(7L))
+        val v = evaluate(old, old.copy(appGroupIds = listOf(7L, 8L)))
+        assertFalse(v.guarded)
+        assertTrue(v.reasons.isEmpty())
+        assertTrue(v.verdicts.isEmpty())
+    }
+
+    @Test
+    fun `追加直选应用不设闸`() {
+        val old = plan(groupIds = null, directEntries = listOf("com.a"))
+        val v = evaluate(old, old.copy(directEntries = listOf("com.a", "com.b")))
+        assertFalse(v.guarded)
+    }
+
+    @Test
+    fun `从零开始绑定应用集属于纯增加`() {
+        val old = plan(groupIds = null, directEntries = null)
+        assertFalse(evaluate(old, old.copy(appGroupIds = listOf(9L))).guarded)
+    }
+
+    @Test
+    fun `应用集顺序变化不算改动`() {
+        val old = plan(groupIds = listOf(7L, 8L))
+        assertFalse(evaluate(old, old.copy(appGroupIds = listOf(8L, 7L))).guarded)
+    }
+
+    @Test
+    fun `直选应用顺序变化不算改动`() {
+        val old = plan(groupIds = null, directEntries = listOf("com.b", "com.a"))
+        assertFalse(evaluate(old, old.copy(directEntries = listOf("com.a", "com.b"))).guarded)
+    }
+
+    @Test
+    fun `纯增加应用集时即使改时间也只列时间原因`() {
+        val old = plan()
+        val v = evaluate(old, old.copy(startMinute = 20 * 60, endMinute = 21 * 60, appGroupIds = listOf(7L, 8L)))
+        assertTrue(v.guarded)
+        assertEquals(listOf(PlanEditGuard.Reason.TIME), v.reasons)
+    }
+
+    // ---------- 没绑定对象时兜底用默认集（不能把「换掉默认集」当成纯增加） ----------
+
+    @Test
+    fun `默认集基础上追加应用集不设闸`() {
+        val old = plan(groupIds = null, directEntries = null)
+        val v = PlanEditGuard.evaluate(
+            old, old.copy(appGroupIds = listOf(5L, 9L)), wednesday,
+            executedToday = false, appointmentAt = null, fallbackGroupId = 5L,
+        )
+        assertFalse(v.guarded)
+    }
+
+    @Test
+    fun `从默认集换成别的集要设闸`() {
+        val old = plan(groupIds = null, directEntries = null)
+        val v = PlanEditGuard.evaluate(
+            old, old.copy(appGroupIds = listOf(9L)), wednesday,
+            executedToday = false, appointmentAt = null, fallbackGroupId = 5L,
+        )
+        assertTrue(v.guarded)
+        assertEquals(listOf(PlanEditGuard.Reason.TARGETS), v.reasons)
+    }
+
+    @Test
+    fun `从默认集改成纯直选应用要设闸`() {
+        val old = plan(groupIds = null, directEntries = null)
+        val v = PlanEditGuard.evaluate(
+            old, old.copy(directEntries = listOf("com.a")), wednesday,
+            executedToday = false, appointmentAt = null, fallbackGroupId = 5L,
+        )
+        assertTrue(v.guarded)
+        assertEquals(listOf(PlanEditGuard.Reason.TARGETS), v.reasons)
+    }
+
+    @Test
+    fun `显式选中默认集不算改动`() {
+        val old = plan(groupIds = null, directEntries = null)
+        val v = PlanEditGuard.evaluate(
+            old, old.copy(appGroupIds = listOf(5L)), wednesday,
+            executedToday = false, appointmentAt = null, fallbackGroupId = 5L,
+        )
+        assertFalse(v.guarded)
     }
 
     @Test
     fun `只改名字不设闸`() {
         val old = plan()
         assertFalse(evaluate(old, old.copy(name = "新名字")).guarded)
+    }
+
+    // ---------- 按条目比较：真正的应用没少就算纯增加 ----------
+
+    @Test
+    fun `直选应用换成包含它们的应用集不设闸`() {
+        val old = plan(groupIds = null, directEntries = listOf("com.a", "com.b"))
+        val v = PlanEditGuard.evaluate(
+            old, old.copy(appGroupIds = listOf(7L), appGroupId = 7L, directEntries = null), wednesday,
+            executedToday = false, appointmentAt = null,
+            groupEntries = { id -> if (id == 7L) listOf("com.a", "com.b", "com.c") else emptyList<String>() },
+        )
+        assertFalse(v.guarded)
+    }
+
+    @Test
+    fun `换成少了应用的应用集要设闸`() {
+        val old = plan(groupIds = null, directEntries = listOf("com.a", "com.b"))
+        val v = PlanEditGuard.evaluate(
+            old, old.copy(appGroupIds = listOf(7L), appGroupId = 7L, directEntries = null), wednesday,
+            executedToday = false, appointmentAt = null,
+            groupEntries = { id -> if (id == 7L) listOf("com.a") else emptyList<String>() },
+        )
+        assertTrue(v.guarded)
+        assertEquals(listOf(PlanEditGuard.Reason.TARGETS), v.reasons)
+    }
+
+    @Test
+    fun `计划字段完全没动时不设闸`() {
+        // 守卫只看计划字段：应用集自己增删应用由分类守卫负责，不会顺带卡住计划
+        val old = plan(groupIds = listOf(7L))
+        assertFalse(evaluate(old, old.copy()).guarded)
     }
 
     @Test
